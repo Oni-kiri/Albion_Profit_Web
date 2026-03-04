@@ -88,6 +88,17 @@ function getTierFromItemId(itemId) {
     return match ? match[1] : null;
 }
 
+// Extract enchantment level from item ID (e.g., T4_SWORD@3 -> 3, T4_SWORD -> 0)
+function getEnchantmentFromItemId(itemId) {
+    const match = /@(\d)/.exec(itemId);
+    return match ? parseInt(match[1]) : 0;
+}
+
+// Get base item ID without enchantment (e.g., T4_SWORD@3 -> T4_SWORD)
+function getBaseItemId(itemId) {
+    return itemId.split('@')[0];
+}
+
 // Parse value safely from mixed API schemas
 function getNumericValue(value) {
     const numberValue = Number(value);
@@ -487,10 +498,32 @@ function getLatestTimestamp(...timestamps) {
     return latest;
 }
 
+// Convert UTC timestamp to local time
+function formatUTCToLocal(timestamp) {
+    if (!timestamp) return null;
+    
+    // Albion API returns timestamps in UTC format like "2026-03-04T10:30:00"
+    // Ensure we parse it as UTC, then convert to local time
+    let date;
+    
+    if (timestamp.endsWith('Z')) {
+        // Already has Z indicator for UTC
+        date = new Date(timestamp);
+    } else if (timestamp.includes('T')) {
+        // ISO format without Z - explicitly treat as UTC
+        date = new Date(timestamp + 'Z');
+    } else {
+        // Fallback
+        date = new Date(timestamp);
+    }
+    
+    return date;
+}
+
 function formatLastUpdateCell(timestamp) {
     if (!timestamp) return '<span class="data-timestamp data-missing">❌ No data</span>';
-    const updateDate = new Date(timestamp);
-    if (!Number.isFinite(updateDate.getTime())) return '<span class="data-timestamp data-missing">❌ Invalid</span>';
+    const updateDate = formatUTCToLocal(timestamp);
+    if (!updateDate || !Number.isFinite(updateDate.getTime())) return '<span class="data-timestamp data-missing">❌ Invalid</span>';
 
     const now = new Date();
     const diffMinutes = Math.floor((now - updateDate) / (1000 * 60));
@@ -1020,6 +1053,406 @@ function exportToCSV() {
     a.click();
 }
 
+// ============================================
+// BLACK MARKET FLIP FUNCTIONALITY
+// ============================================
+
+let bmFlipData = {}; // Store black market opportunities
+let bmSortColumn = 'roi'; // Default sort column: roi, grossProfit, caerleonPrice, bmBuyPrice, itemName, tier
+let bmSortDirection = 'desc'; // 'asc' or 'desc'
+let bmRawCaerleonData = {}; // Raw Caerleon data (all items fetched)
+let bmRawBlackMarketData = {}; // Raw BlackMarket data (all items fetched)
+
+function sortBlackMarketData(column) {
+    // Toggle direction if same column, otherwise default to descending
+    if (bmSortColumn === column) {
+        bmSortDirection = bmSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        bmSortColumn = column;
+        bmSortDirection = column === 'itemName' ? 'asc' : 'desc'; // Item name defaults to A-Z
+    }
+    displayBlackMarketFlips();
+}
+
+async function fetchBlackMarketPrices() {
+    const container = document.getElementById('bmResultsContainer');
+    const progressContainer = document.getElementById('bmProgressContainer');
+    const progressBar = document.getElementById('bmProgressBar');
+    const progressPercent = document.getElementById('bmProgressPercent');
+    const progressText = document.getElementById('bmProgressText');
+    const currentBatch = document.getElementById('bmCurrentBatch');
+    const totalBatches = document.getElementById('bmTotalBatches');
+    const itemsProcessed = document.getElementById('bmItemsProcessed');
+    const flipsFound = document.getElementById('bmFlipsFound');
+    const elapsedTime = document.getElementById('bmElapsedTime');
+    
+    // Show progress container
+    progressContainer.style.display = 'block';
+    container.innerHTML = '';
+    
+    let startTime = Date.now();
+    let foundCount = 0;
+    
+    const updateProgress = (current, total, processed, found) => {
+        const percent = Math.round((current / total) * 100);
+        progressBar.style.width = percent + '%';
+        progressPercent.textContent = percent + '%';
+        progressText.textContent = `Scanning batch ${current}/${total}...`;
+        currentBatch.textContent = current;
+        totalBatches.textContent = total;
+        itemsProcessed.textContent = processed;
+        flipsFound.textContent = found;
+        
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        elapsedTime.textContent = elapsed + 's';
+    };
+    
+    try {
+        // Load equipment items if not already loaded
+        if (allEquipmentItems.length === 0) {
+            progressText.textContent = 'Loading equipment list...';
+            await loadEquipmentItems();
+        }
+        
+        // Load item names if not already loaded
+        if (Object.keys(itemNameMap).length === 0) {
+            progressText.textContent = 'Loading item names...';
+            await loadItemNames();
+        }
+        
+        console.log(`Fetching Black Market prices for ${allEquipmentItems.length} items...`);
+        
+        // Generate all enchantment variations (@0, @1, @2, @3) for each base item
+        const itemsWithEnchantments = [];
+        allEquipmentItems.forEach(baseItem => {
+            // Add base item (.0)
+            itemsWithEnchantments.push(baseItem);
+            // Add enchantment levels .1, .2, .3, .4
+            for (let enchant = 1; enchant <= 4; enchant++) {
+                itemsWithEnchantments.push(`${baseItem}@${enchant}`);
+            }
+        });
+        
+        console.log(`📊 Base items: ${allEquipmentItems.length}`);
+        console.log(`📊 With all enchantments (@0-@4): ${itemsWithEnchantments.length} total items`);
+        console.log(`📊 Total batches to process: ${Math.ceil(itemsWithEnchantments.length / 100)}`);
+        
+        // Clear previous scan data
+        bmRawCaerleonData = {};
+        bmRawBlackMarketData = {};
+        
+        const bmFlips = [];
+        const batchSize = 100;
+        const totalBatchCount = Math.ceil(itemsWithEnchantments.length / batchSize);
+        let totalItemsScanned = 0;
+        
+        updateProgress(0, totalBatchCount, 0, 0);
+        
+        // Fetch prices for all items from both Caerleon and BlackMarket
+        for (let i = 0; i < itemsWithEnchantments.length; i += batchSize) {
+            const batch = itemsWithEnchantments.slice(i, i + batchSize);
+            const itemIds = batch.join(',');
+            const currentBatchNum = Math.floor(i / batchSize) + 1;
+            
+            console.log(`\n🔄 Batch ${currentBatchNum}/${totalBatchCount}: Fetching ${batch.length} items...`);
+            
+            try {
+                // Get prices from both Caerleon (player market) and BlackMarket (NPC buyer)
+                const url = `https://east.albion-online-data.com/api/v2/stats/prices/${itemIds}.json?locations=Caerleon,BlackMarket&qualities=1,2,3,4,5`;
+                console.log(`📡 API URL: ${url.substring(0, 100)}...`);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const prices = await response.json();
+                console.log(`✅ Batch ${currentBatchNum}: Received ${prices.length} price entries`);
+                
+                // Store raw data for data validation inspection
+                prices.forEach(item => {
+                    const key = `${item.item_id}_Q${item.quality || 1}`;
+                    
+                    if (item.city === 'Caerleon') {
+                        bmRawCaerleonData[key] = {
+                            item_id: item.item_id,
+                            sell_price_min: item.sell_price_min || 0,
+                            sell_price_min_date: item.sell_price_min_date,
+                            quality: item.quality || 1
+                        };
+                    } else if (item.city === 'Black Market') {
+                        bmRawBlackMarketData[key] = {
+                            item_id: item.item_id,
+                            buy_price_max: item.buy_price_max || 0,
+                            buy_price_max_date: item.buy_price_max_date,
+                            quality: item.quality || 1
+                        };
+                    }
+                });
+                
+                // Group by item_id and quality to match Caerleon with BlackMarket
+                const priceMap = new Map();
+                
+                prices.forEach(item => {
+                    const key = `${item.item_id}_Q${item.quality || 1}`;
+                    
+                    if (!priceMap.has(key)) {
+                        priceMap.set(key, { caerleon: null, blackmarket: null, item_id: item.item_id, quality: item.quality || 1 });
+                    }
+                    
+                    const entry = priceMap.get(key);
+                    
+                    if (item.city === 'Caerleon') {
+                        entry.caerleon = {
+                            sell_price_min: item.sell_price_min,
+                            sell_price_min_date: item.sell_price_min_date
+                        };
+                    } else if (item.city === 'Black Market') {
+                        entry.blackmarket = {
+                            buy_price_max: item.buy_price_max,
+                            buy_price_max_date: item.buy_price_max_date
+                        };
+                    }
+                });
+                
+                console.log(`🔍 Grouped into ${priceMap.size} unique item+quality combinations`);
+                
+                let batchFlipsFound = 0;
+                
+                // Now compare Caerleon vs BlackMarket for each item
+                priceMap.forEach((entry, key) => {
+                    if (!entry.caerleon || !entry.blackmarket) {
+                        // Missing one side, skip
+                        return;
+                    }
+                    
+                    if (!entry.caerleon.sell_price_min || !entry.blackmarket.buy_price_max) {
+                        // No prices available
+                        return;
+                    }
+                    
+                    const caerleonPrice = entry.caerleon.sell_price_min; // What we pay to buy
+                    const bmPrice = entry.blackmarket.buy_price_max; // What we get selling to BM
+                    
+                    // Calculate profit (8% fee, or 4% with premium - using 8% conservatively)
+                    const netSellPrice = bmPrice * 0.92; // After 8% tax
+                    const grossProfit = netSellPrice - caerleonPrice;
+                    const roi = (grossProfit / caerleonPrice) * 100;
+                    
+                    // Only include profitable flips
+                    if (grossProfit > 0) {
+                        const baseItemId = getBaseItemId(entry.item_id);
+                        const enchantment = getEnchantmentFromItemId(entry.item_id);
+                        
+                        bmFlips.push({
+                            itemId: entry.item_id,
+                            baseItemId: baseItemId,
+                            itemName: itemNameMap[baseItemId] || itemNameMap[entry.item_id] || baseItemId,
+                            enchantment: enchantment,
+                            quality: entry.quality,
+                            caerleonPrice: caerleonPrice,
+                            bmBuyPrice: bmPrice,
+                            netSellPrice: netSellPrice,
+                            grossProfit: grossProfit,
+                            roi: roi,
+                            timestamp: entry.caerleon.sell_price_min_date || new Date().toISOString()
+                        });
+                        batchFlipsFound++;
+                        foundCount++;
+                    }
+                });
+                
+                console.log(`💰 Batch ${currentBatchNum}: Found ${batchFlipsFound} profitable flips`);
+                totalItemsScanned += prices.length;
+                
+                updateProgress(currentBatchNum, totalBatchCount, totalItemsScanned, foundCount);
+            } catch (err) {
+                console.error(`❌ Error fetching batch ${currentBatchNum}/${totalBatchCount}:`, err);
+            }
+            
+            // Small delay between batches to respect rate limits
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        console.log(`\n🎉 SCAN COMPLETE!`);
+        console.log(`📊 Total items scanned: ${totalItemsScanned}`);
+        console.log(`✅ Total profitable flips found: ${bmFlips.length}`);
+        
+        if (bmFlips.length > 0) {
+            console.log(`🏆 Best flip: ${bmFlips[0].itemName} (Q${bmFlips[0].quality}) - ROI: ${bmFlips[0].roi.toFixed(2)}%`);
+        }
+        
+        console.log(`\n🎉 SCAN COMPLETE!`);
+        console.log(`📊 Total items scanned: ${totalItemsScanned}`);
+        console.log(`✅ Total profitable flips found: ${bmFlips.length}`);
+        
+        if (bmFlips.length > 0) {
+            // Sort by ROI descending (most profitable first)
+            bmFlips.sort((a, b) => b.roi - a.roi);
+            const topFlip = bmFlips[0];
+            const enchStr = topFlip.enchantment > 0 ? `@${topFlip.enchantment}` : '.0';
+            console.log(`🏆 Best flip: ${topFlip.itemName} ${enchStr} (Q${topFlip.quality}) - ROI: ${topFlip.roi.toFixed(2)}% - Profit: ${topFlip.grossProfit.toLocaleString()} silver`);
+            console.log(`💎 Top 5 flips:`);
+            bmFlips.slice(0, 5).forEach((flip, idx) => {
+                const enh = flip.enchantment > 0 ? `@${flip.enchantment}` : '.0';
+                console.log(`  ${idx + 1}. ${flip.itemName} ${enh} (Q${flip.quality}) - Buy: ${flip.caerleonPrice.toLocaleString()}, Sell: ${flip.bmBuyPrice.toLocaleString()}, Profit: ${flip.grossProfit.toLocaleString()}, ROI: ${flip.roi.toFixed(2)}%`);
+            });
+        } else {
+            console.log(`⚠️ No profitable flips found in this scan`);
+        }
+        
+        bmFlipData = bmFlips;
+        
+        console.log(`📦 Data Validation: ${Object.keys(bmRawCaerleonData).length} Caerleon entries, ${Object.keys(bmRawBlackMarketData).length} BlackMarket entries stored`);
+        
+        // Hide progress and show completion
+        progressContainer.style.display = 'none';
+        displayBlackMarketFlips();
+        
+    } catch (error) {
+        console.error('Error fetching Black Market prices:', error);
+        progressContainer.style.display = 'none';
+        container.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
+    }
+}
+
+function displayBlackMarketFlips() {
+    const container = document.getElementById('bmResultsContainer');
+    const emptyState = document.getElementById('bmEmptyStateMessage');
+    
+    if (bmFlipData.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    // Get filter values
+    const tierFilter = document.getElementById('bmTierSelect')?.value || '';
+    const enchantmentFilter = document.getElementById('bmEnchantmentSelect')?.value || '';
+    const qualityFilter = document.getElementById('bmQualitySelect')?.value || '';
+    const minRoi = parseFloat(document.getElementById('bmMinRoiFilter')?.value || 5);
+    const maxResults = parseInt(document.getElementById('bmMaxResults')?.value || 50);
+    
+    // Apply filters
+    let filtered = bmFlipData.filter(item => {
+        if (item.roi < minRoi) return false;
+        
+        if (enchantmentFilter && item.enchantment !== parseInt(enchantmentFilter)) return false;
+        
+        if (qualityFilter && item.quality !== parseInt(qualityFilter)) return false;
+        
+        if (tierFilter) {
+            const itemTier = getTierFromItemId(item.itemId);
+            if (itemTier !== tierFilter) return false;
+        }
+        
+        return true;
+    });
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+        let aVal, bVal;
+        
+        switch (bmSortColumn) {
+            case 'itemName':
+                aVal = a.itemName.toLowerCase();
+                bVal = b.itemName.toLowerCase();
+                break;
+            case 'tier':
+                aVal = parseInt(getTierFromItemId(a.itemId));
+                bVal = parseInt(getTierFromItemId(b.itemId));
+                break;
+            case 'caerleonPrice':
+                aVal = a.caerleonPrice;
+                bVal = b.caerleonPrice;
+                break;
+            case 'bmBuyPrice':
+                aVal = a.bmBuyPrice;
+                bVal = b.bmBuyPrice;
+                break;
+            case 'grossProfit':
+                aVal = a.grossProfit;
+                bVal = b.grossProfit;
+                break;
+            case 'roi':
+            default:
+                aVal = a.roi;
+                bVal = b.roi;
+                break;
+        }
+        
+        if (typeof aVal === 'string') {
+            return bmSortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        } else {
+            return bmSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+    });
+    
+    // Limit results
+    filtered = filtered.slice(0, maxResults);
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    emptyState.style.display = 'none';
+    
+    // Helper function to create sort indicator
+    const getSortIcon = (column) => {
+        if (bmSortColumn !== column) return '<span class="sort-arrows">⇅</span>';
+        return bmSortDirection === 'asc' ? '<span class="sort-arrow">▲</span>' : '<span class="sort-arrow">▼</span>';
+    };
+    
+    // Build table
+    let html = '<div class="table-responsive mt-4"><table class="table table-dark table-hover">';
+    html += '<thead>';
+    html += '<tr style="background-color: #2a5298;">';
+    html += `<th class="sortable" onclick="sortBlackMarketData('itemName')">Item Name ${getSortIcon('itemName')}</th>`;
+    html += `<th class="sortable" onclick="sortBlackMarketData('tier')">Tier ${getSortIcon('tier')}</th>`;
+    html += '<th>Enhancement</th>';
+    html += '<th>Quality</th>';
+    html += `<th class="sortable" onclick="sortBlackMarketData('caerleonPrice')">Caerleon Buy Price ${getSortIcon('caerleonPrice')}</th>`;
+    html += `<th class="sortable" onclick="sortBlackMarketData('bmBuyPrice')">Black Market Sell ${getSortIcon('bmBuyPrice')}</th>`;
+    html += `<th class="sortable" onclick="sortBlackMarketData('grossProfit')">Gross Profit ${getSortIcon('grossProfit')}</th>`;
+    html += `<th class="sortable" onclick="sortBlackMarketData('roi')">ROI % ${getSortIcon('roi')}</th>`;
+    html += '<th>Last Updated</th>';
+    html += '</tr>';
+    html += '</thead>';
+    html += '<tbody>';
+    
+    filtered.forEach(item => {
+        const qualityNames = ['', 'Normal', 'Good', 'Excellent', 'Masterpiece', 'Unique'];
+        const roiClass = item.roi >= 50 ? 'roi-high' : item.roi >= 20 ? 'roi-medium' : 'roi-low';
+        const timeStr = formatLastUpdateCell(item.timestamp);
+        const enchantmentBadge = item.enchantment === 0 ? '' : `<span class="enhancement-level">@${item.enchantment}</span>`;
+        
+        const tier = getTierFromItemId(item.itemId);
+        const tierBadgeClass = `tier-${tier}`;
+        const tierNames = { '4': 'T4', '5': 'T5', '6': 'T6', '7': 'T7', '8': 'T8' };
+        const tierDisplay = tierNames[tier] || `T${tier}`;
+        
+        html += `
+            <tr class="profitable">
+                <td><strong>${item.itemName}</strong></td>
+                <td><span class="tier-badge ${tierBadgeClass}">${tierDisplay}</span></td>
+                <td class="col-enhancement">${enchantmentBadge || '<span class="text-muted">.0</span>'}</td>
+                <td><span class="badge bg-info">${qualityNames[item.quality] || 'Unknown'}</span></td>
+                <td class="price-col">${item.caerleonPrice.toLocaleString()}</td>
+                <td class="price-col">${item.bmBuyPrice.toLocaleString()}</td>
+                <td class="profit-positive"><strong>+${item.grossProfit.toLocaleString()}</strong></td>
+                <td class="roi-value ${roiClass}"><strong>${item.roi.toFixed(2)}%</strong></td>
+                <td>${timeStr}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div>';
+    html += `<div class="alert alert-info mt-3">📊 Showing ${filtered.length} of ${bmFlipData.length} total opportunities | Min ROI: ${minRoi}%</div>`;
+    
+    container.innerHTML = html;
+}
+
 // Event listeners
 window.addEventListener('load', async () => {
     console.log('Albion Enhancement Profit Calculator loaded');
@@ -1051,8 +1484,40 @@ window.addEventListener('load', async () => {
     // Setup export button listener
     document.getElementById('exportBtn').addEventListener('click', exportToCSV);
     
+    // Setup Black Market button listeners
+    document.getElementById('scanBlackMarketBtn').addEventListener('click', fetchBlackMarketPrices);
+    document.getElementById('bmTierSelect').addEventListener('change', displayBlackMarketFlips);
+    document.getElementById('bmEnchantmentSelect').addEventListener('change', displayBlackMarketFlips);
+    document.getElementById('bmQualitySelect').addEventListener('change', displayBlackMarketFlips);
+    document.getElementById('bmMinRoiFilter').addEventListener('change', displayBlackMarketFlips);
+    document.getElementById('bmMaxResults').addEventListener('change', displayBlackMarketFlips);
+    
+    // Setup auto-refresh for Black Market
+    let bmAutoRefreshInterval = null;
+    document.getElementById('autoRefreshBMBtn').addEventListener('click', function() {
+        if (bmAutoRefreshInterval) {
+            clearInterval(bmAutoRefreshInterval);
+            bmAutoRefreshInterval = null;
+            this.textContent = '🔄 Auto Refresh (30s)';
+            this.classList.remove('btn-danger');
+            this.classList.add('btn-info');
+        } else {
+            this.textContent = '⏸ Stop Auto Refresh';
+            this.classList.remove('btn-info');
+            this.classList.add('btn-danger');
+            fetchBlackMarketPrices();
+            bmAutoRefreshInterval = setInterval(fetchBlackMarketPrices, 30000);
+        }
+    });
+    
     // Setup inspect city dropdown listener
     document.getElementById('inspectCity').addEventListener('change', inspectCityData);
+    
+    // Setup inspect search box listener (real-time filtering)
+    const inspectSearch = document.getElementById('inspectSearch');
+    if (inspectSearch) {
+        inspectSearch.addEventListener('keyup', inspectCityData);
+    }
 
     // Load existing data from local database
     const storedEquipment = DB.getAllEquipmentPrices();
@@ -1393,6 +1858,7 @@ function updateCachedCitiesList() {
 // Inspect city data
 function inspectCityData() {
     const city = document.getElementById('inspectCity').value;
+    const searchTerm = (document.getElementById('inspectSearch')?.value || '').toLowerCase();
     const inspector = document.getElementById('cityDataInspector');
     
     if (!city) {
@@ -1400,26 +1866,149 @@ function inspectCityData() {
         return;
     }
     
-    const cityData = DB.getEquipmentPrices(city);
-    if (Object.keys(cityData).length === 0) {
+    let cityData = {};
+    let dataSource = city;
+    
+    // Handle special locations - group by item_id with all qualities in same row
+    let groupedData = {}; // { item_id: { qualities: {1: {price, date}, 2: {...}, ...} } }
+    
+    if (city === 'Caerleon' || city === 'BlackMarket') {
+        // These come from the raw Black Market scan data
+        if (city === 'Caerleon') {
+            if (Object.keys(bmRawCaerleonData).length === 0) {
+                inspector.innerHTML = `<p class="text-warning">⚠️ No Caerleon data cached yet. Click "Scan Black Market Flips" first to fetch Caerleon prices.</p>`;
+                return;
+            }
+            // Group by item_id
+            Object.values(bmRawCaerleonData).forEach(item => {
+                if (!groupedData[item.item_id]) {
+                    groupedData[item.item_id] = { qualities: {} };
+                }
+                groupedData[item.item_id].qualities[item.quality] = {
+                    price: item.sell_price_min || 0,
+                    date: item.sell_price_min_date
+                };
+            });
+        } else if (city === 'BlackMarket') {
+            if (Object.keys(bmRawBlackMarketData).length === 0) {
+                inspector.innerHTML = `<p class="text-warning">⚠️ No Black Market data cached yet. Click "Scan Black Market Flips" first.</p>`;
+                return;
+            }
+            // Group by item_id
+            Object.values(bmRawBlackMarketData).forEach(item => {
+                if (!groupedData[item.item_id]) {
+                    groupedData[item.item_id] = { qualities: {} };
+                }
+                groupedData[item.item_id].qualities[item.quality] = {
+                    price: item.buy_price_max || 0,
+                    date: item.buy_price_max_date
+                };
+            });
+        }
+    } else {
+        // Regular equipment price data - need to group by base item
+        const rawData = DB.getEquipmentPrices(city);
+        Object.entries(rawData).forEach(([itemId, item]) => {
+            if (!groupedData[itemId]) {
+                groupedData[itemId] = { qualities: {} };
+            }
+            const quality = item.quality || 1;
+            groupedData[itemId].qualities[quality] = {
+                price: item.sell_price_min || item.buy_price_max || 0,
+                date: item.sell_price_min_date
+            };
+        });
+    }
+    
+    if (Object.keys(groupedData).length === 0) {
         inspector.innerHTML = `<p class="text-warning">No data cached for ${city}</p>`;
         return;
     }
     
-    // Show sample items
-    const items = Object.keys(cityData).slice(0, 10);
-    let html = `<strong>Sample Data from ${city} (showing first 10 of ${Object.keys(cityData).length} items):</strong><br><br>`;
-    html += '<div class="table-responsive"><table class="table table-sm table-dark"><thead><tr><th>Item ID</th><th>Sell Price Min</th><th>Last Update</th></tr></thead><tbody>';
+    // Filter by search term
+    let items = Object.keys(groupedData);
+    if (searchTerm) {
+        items = items.filter(itemId => {
+            const itemName = itemNameMap[itemId] || itemId;
+            return itemId.toLowerCase().includes(searchTerm) || itemName.toLowerCase().includes(searchTerm);
+        });
+    }
     
-    items.forEach(itemId => {
-        const item = cityData[itemId];
-        const price = item.sell_price_min || 0;
-        const date = item.sell_price_min_date ? new Date(item.sell_price_min_date).toLocaleString() : 'Unknown';
-        html += `<tr><td>${itemId}</td><td>${price.toLocaleString()}</td><td><small>${date}</small></td></tr>`;
+    const totalItems = Object.keys(groupedData).length;
+    const filteredItems = items;
+    
+    // Show scrollable table with all qualities in one row
+    let html = `<div class="mb-2">
+        <strong>📊 ${city} Data</strong> 
+        <span class="text-muted">(showing ${filteredItems.length} of ${totalItems} items)</span>
+    </div>`;
+    
+    if (searchTerm) {
+        html += `<div class="alert alert-info alert-sm p-2"><small>🔍 Searching for: <strong>${searchTerm}</strong></small></div>`;
+    }
+    
+    html += '<div class="table-responsive" style="max-height: 600px; overflow-y: auto;"><table class="table table-sm table-dark mb-0" style="font-size: 0.85rem;"><thead style="position: sticky; top: 0; background-color: #2a5298; z-index: 10;"><tr><th style="min-width: 150px;">Item ID / Name</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Q5</th><th>Last Update</th></tr></thead><tbody>';
+    
+    // Show items grouped by item_id with all qualities in same row
+    filteredItems.forEach(itemId => {
+        const itemData = groupedData[itemId];
+        const itemName = itemNameMap[itemId] || 'Unknown';
+        
+        // Get most recent update time across all qualities
+        let latestDate = null;
+        Object.values(itemData.qualities).forEach(q => {
+            if (q.date) {
+                const qDate = formatUTCToLocal(q.date);
+                if (!latestDate || qDate > latestDate) {
+                    latestDate = qDate;
+                }
+            }
+        });
+        const dateStr = latestDate ? latestDate.toLocaleString('en-US', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit', 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false 
+        }) : 'Unknown';
+        
+        html += `<tr>
+            <td><span class="text-info">${itemId}</span><br><small class="text-muted">${itemName}</small></td>`;
+        
+        // Show price for each quality (Q1-Q5)
+        for (let q = 1; q <= 5; q++) {
+            const qualityData = itemData.qualities[q];
+            if (qualityData) {
+                const price = qualityData.price;
+                const priceClass = price > 0 ? 'text-success' : 'text-muted';
+                const priceDisplay = price > 0 ? price.toLocaleString() : '-';
+                html += `<td class="${priceClass}"><strong>${priceDisplay}</strong></td>`;
+            } else {
+                html += `<td class="text-muted">-</td>`;
+            }
+        }
+        
+        html += `<td><small>${dateStr}</small></td>`;
+        html += `</tr>`;
     });
     
     html += '</tbody></table></div>';
+    
+    if (filteredItems.length === 0) {
+        html += '<p class="text-warning mt-3">❌ No items match your search</p>';
+    }
+    
     inspector.innerHTML = html;
+}
+
+// Clear search box
+function clearInspectSearch() {
+    const searchBox = document.getElementById('inspectSearch');
+    if (searchBox) {
+        searchBox.value = '';
+        inspectCityData(); // Refresh with cleared search
+    }
 }
 
 // Update material prices inspector

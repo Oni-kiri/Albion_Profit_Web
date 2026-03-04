@@ -232,6 +232,28 @@
         .tier-5 { background-color: #0d6efd; color: white; }
         .tier-6 { background-color: #6f42c1; color: white; }
         .tier-7 { background-color: #ffc107; color: black; }
+        .tier-8 { background-color: #e91e63; color: white; }
+        
+        /* Sortable table headers */
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 25px !important;
+        }
+        .sortable:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .sort-arrow {
+            color: #ffc107;
+            font-size: 0.8rem;
+            margin-left: 5px;
+        }
+        .sort-arrows {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.8rem;
+            margin-left: 5px;
+        }
 
         /* Category badges */
         .category-badge {
@@ -293,6 +315,31 @@
         /* Better table spacing */
         table td, table th { padding: 0.75rem !important; vertical-align: middle; }
         table thead th { font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Inspection table scrolling - fixed height with sticky header */
+        #cityDataInspector .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #2d3e50;
+            border-radius: 4px;
+        }
+        
+        #cityDataInspector table thead th {
+            position: sticky;
+            top: 0;
+            background-color: #2a5298 !important;
+            z-index: 10;
+            border-bottom: 2px solid #1a232e;
+        }
+        
+        #cityDataInspector table tbody tr {
+            height: auto;
+        }
+        
+        /* Ensure minimum 10 rows visible (~60px per row = 600px) */
+        #cityDataInspector .table-responsive {
+            min-height: 420px;
+        }
 
         /* City header */
         .city-header {
@@ -389,7 +436,12 @@
         <ul class="nav nav-tabs nav-fill mb-4" id="mainTabs" role="tablist" style="border-bottom: 3px solid #2a5298;">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="profit-tab" data-bs-toggle="tab" data-bs-target="#profit-pane" type="button" role="tab" aria-controls="profit-pane" aria-selected="true" style="font-size: 1.1rem; font-weight: 600;">
-                    📈 Profit Results
+                    � Enhancement Profit
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="blackmarket-tab" data-bs-toggle="tab" data-bs-target="#blackmarket-pane" type="button" role="tab" aria-controls="blackmarket-pane" aria-selected="false" style="font-size: 1.1rem; font-weight: 600;">
+                    🏪 Black Market Flip
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -509,6 +561,116 @@
                 </div>
             </div>
 
+            <!-- BLACK MARKET FLIP TAB -->
+            <div class="tab-pane fade" id="blackmarket-pane" role="tabpanel" aria-labelledby="blackmarket-tab">
+                <div class="filter-section mb-4 mt-4">
+                    <h5 class="mb-3">🏪 Caerleon ⟷ Black Market Safe Flip</h5>
+                    <p class="text-muted">Zero-risk arbitrage: Buy in Caerleon player market → Sell instantly to Black Market NPC. Shows only profitable items.</p>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="bmTierSelect" class="form-label">Filter by Tier:</label>
+                            <select id="bmTierSelect" class="form-select">
+                                <option value="">All Tiers (4-8)</option>
+                                <option value="4">Tier 4 (Adept)</option>
+                                <option value="5">Tier 5 (Expert)</option>
+                                <option value="6">Tier 6 (Master)</option>
+                                <option value="7">Tier 7 (Grandmaster)</option>
+                                <option value="8">Tier 8 (Legendary)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="bmEnchantmentSelect" class="form-label">Filter by Enhancement:</label>
+                            <select id="bmEnchantmentSelect" class="form-select">
+                                <option value="">All Enhancements (.0 - .4)</option>
+                                <option value="0">.0 (Base)</option>
+                                <option value="1">.1 (Enchanted)</option>
+                                <option value="2">.2 (Rare)</option>
+                                <option value="3">.3 (Exceptional)</option>
+                                <option value="4">.4 (Pristine)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="bmQualitySelect" class="form-label">Filter by Quality:</label>
+                            <select id="bmQualitySelect" class="form-select">
+                                <option value="">All Qualities (1-5)</option>
+                                <option value="1">Normal (Quality 1)</option>
+                                <option value="2">Good (Quality 2)</option>
+                                <option value="3">Excellent (Quality 3)</option>
+                                <option value="4">Masterpiece (Quality 4)</option>
+                                <option value="5">Unique (Quality 5)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="bmMinRoiFilter" class="form-label">Minimum ROI (%):</label>
+                            <input type="number" id="bmMinRoiFilter" class="form-control" value="5" min="0" max="1000">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="bmMaxResults" class="form-label">Max Results:</label>
+                            <select id="bmMaxResults" class="form-select">
+                                <option value="25">Top 25</option>
+                                <option value="50">Top 50</option>
+                                <option value="100">Top 100</option>
+                                <option value="250">Top 250</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button id="scanBlackMarketBtn" class="btn btn-warning btn-lg">
+                        🔍 Scan Black Market Flips
+                    </button>
+                    <button id="autoRefreshBMBtn" class="btn btn-info ms-2">
+                        🔄 Auto Refresh (30s)
+                    </button>
+                </div>
+
+                <!-- Black Market Formula Info -->
+                <div class="enhancement-formula">
+                    <strong>🏪 Black Market Flip Formula:</strong><br>
+                    Buy Price = Caerleon market sell_price_min<br>
+                    Sell Price = Black Market buy_price_max<br>
+                    Tax = 8% (4% with Premium)<br>
+                    Net Profit = (Sell Price × 0.92) - Buy Price<br>
+                    ROI (%) = (Net Profit / Buy Price) × 100
+                </div>
+
+                <!-- Progress Bar for Black Market Scan -->
+                <div id="bmProgressContainer" class="progress-container" style="display: none;">
+                    <div class="row mb-2">
+                        <div class="col-md-8">
+                            <div class="progress" style="height: 25px;">
+                                <div id="bmProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%; background-color: #ffc107;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                    <span id="bmProgressPercent" style="color: black; font-weight: bold;">0%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="progress-stats">
+                                <span id="bmProgressText">Initializing...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="progress-stats">
+                        🔍 <span id="bmCurrentBatch">0</span>/<span id="bmTotalBatches">0</span> batches | 
+                        📦 Items: <span id="bmItemsProcessed">0</span> | 
+                        ✅ Found: <span id="bmFlipsFound">0</span> |
+                        ⏱️ <span id="bmElapsedTime">0s</span>
+                    </div>
+                </div>
+
+                <!-- Results Container -->
+                <div id="bmResultsContainer"></div>
+
+                <!-- Empty State Message -->
+                <div id="bmEmptyStateMessage" class="empty-state" style="display: none;">
+                    <div class="empty-state-icon">🏪</div>
+                    <div class="empty-state-text"><strong>No profitable flips found</strong></div>
+                    <div class="empty-state-hint">Click "Scan Black Market Flips" to find profit opportunities</div>
+                </div>
+            </div>
+
             <!-- DATA VALIDATION TAB -->
             <div class="tab-pane fade" id="validation-pane" role="tabpanel" aria-labelledby="validation-tab">
                 <div class="mt-4">
@@ -530,20 +692,31 @@
                     <!-- City Data Inspector -->
                     <div class="filter-section mb-4">
                         <h5>Inspect City Data</h5>
-                        <div class="mb-3">
-                            <label for="inspectCity" class="form-label">Select City to Inspect:</label>
-                            <select id="inspectCity" class="form-select">
-                                <option value="">-- Select a city --</option>
-                                <option value="Fort Sterling">Fort Sterling</option>
-                                <option value="Lymhurst">Lymhurst</option>
-                                <option value="Bridgewatch">Bridgewatch</option>
-                                <option value="Martlock">Martlock</option>
-                                <option value="Thetford">Thetford</option>
-                            </select>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="inspectCity" class="form-label">Select Location to Inspect:</label>
+                                <select id="inspectCity" class="form-select">
+                                    <option value="">-- Select a location --</option>
+                                    <option value="🏪 Player Markets">--- PLAYER MARKETS ---</option>
+                                    <option value="Fort Sterling">Fort Sterling</option>
+                                    <option value="Lymhurst">Lymhurst</option>
+                                    <option value="Bridgewatch">Bridgewatch</option>
+                                    <option value="Martlock">Martlock</option>
+                                    <option value="Thetford">Thetford</option>
+                                    <option value="Caerleon">Caerleon</option>
+                                    <option value="🏙️ NPC Markets">--- NPC MARKETS ---</option>
+                                    <option value="BlackMarket">🏪 Black Market</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="inspectSearch" class="form-label">Search Items:</label>
+                                <input type="text" id="inspectSearch" class="form-control" placeholder="Search by item name or ID...">
+                            </div>
                         </div>
                         <button class="btn btn-info" onclick="inspectCityData()">🔍 Inspect</button>
+                        <button class="btn btn-secondary ms-2" onclick="clearInspectSearch()">Clear Search</button>
                         <button class="btn btn-warning ms-2" onclick="clearDatabase()">🗑️ Clear All Data</button>
-                        <div id="cityDataInspector" class="mt-3"></div>
+                        <div id="cityDataInspector" class="mt-3" style="max-height: 600px; overflow-y: auto; border: 1px solid #2d3e50; border-radius: 4px;"></div>
                     </div>
 
                     <!-- Material Prices Inspector -->
