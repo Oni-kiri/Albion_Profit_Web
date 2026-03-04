@@ -466,6 +466,14 @@ function isDataOutdated(priceData) {
     return diffHours > 24;
 }
 
+function isTimestampOutdated(timestamp) {
+    if (!timestamp) return true;
+    const time = new Date(timestamp).getTime();
+    if (!Number.isFinite(time)) return true;
+    const diffHours = (Date.now() - time) / (1000 * 60 * 60);
+    return diffHours > 24;
+}
+
 function getLatestTimestamp(...timestamps) {
     let latest = null;
     timestamps.forEach(ts => {
@@ -729,7 +737,8 @@ function displayResults() {
     container.innerHTML = '';
     
     // Check if we have data at all
-    if (Object.keys(allPriceData).length === 0) {
+    const hasAnyEquipmentData = Object.values(allPriceData).some(cityData => Object.keys(cityData || {}).length > 0);
+    if (!hasAnyEquipmentData) {
         document.getElementById('emptyStateMessage').style.display = 'block';
         document.getElementById('refreshInfo').style.display = 'none';
         return;
@@ -742,6 +751,8 @@ function displayResults() {
     const selectedCategory = document.getElementById('categorySelect').value;
     const selectedTier = document.getElementById('tierSelect').value;
     const selectedCity = document.getElementById('citySelect').value;
+    const statusFilterElement = document.getElementById('statusFilter');
+    const statusFilter = statusFilterElement ? statusFilterElement.value : 'all';
     
     let totalResults = 0;
     
@@ -836,11 +847,15 @@ function displayResults() {
     
     citiesToDisplay.forEach(city => {
         let results = filteredResults[city] || [];
-        
+
         results = results.filter(item => {
             if (selectedCategory && item.category !== selectedCategory) return false;
             if (selectedTier && getTierFromItemId(item.itemId) !== selectedTier) return false;
             if (item.roi < minRoi) return false;
+
+            const rowIsOutdated = isTimestampOutdated(item.latestUpdatedAt);
+            if (statusFilter === 'fresh' && rowIsOutdated) return false;
+            if (statusFilter === 'old' && !rowIsOutdated) return false;
             return true;
         });
         
@@ -886,14 +901,15 @@ function displayResults() {
         results = results.slice(0, 50); // Show top 50
         
         results.forEach(item => {
+            const rowIsOutdated = isTimestampOutdated(item.latestUpdatedAt);
             const roiClass = item.roi >= 50 ? 'roi-high' : item.roi >= 30 ? 'roi-medium' : 'roi-low';
-            const statusIcon = item.isOutdated ? '⚠️' : item.basePrice === 0 || item.enhancedPrice === 0 ? '❌' : '✅';
+            const dataStatus = rowIsOutdated ? '⚠️ Old' : '✅ Fresh';
             
             // Highlight rows with missing prices or outdated data
             let rowClass = '';
             if (item.basePrice === 0 || item.enhancedPrice === 0) {
                 rowClass = 'row-no-price';
-            } else if (item.isOutdated) {
+            } else if (rowIsOutdated) {
                 rowClass = 'row-outdated';
             }
             
@@ -924,7 +940,7 @@ function displayResults() {
                     <td class="price-col profit-positive">${item.profit > 0 ? item.profit.toLocaleString() : item.profit.toFixed(0)}</td>
                     <td class="roi-value ${roiClass}"><strong>${item.roi.toFixed(2)}%</strong></td>
                     <td>${formatLastUpdateCell(item.latestUpdatedAt)}</td>
-                    <td>${statusIcon}</td>
+                    <td><span class="${rowIsOutdated ? 'text-warning' : 'text-success'}">${dataStatus}</span></td>
                 </tr>
             `;
         });
@@ -1020,6 +1036,7 @@ window.addEventListener('load', async () => {
     document.getElementById('tierSelect').addEventListener('change', displayResults);
     document.getElementById('citySelect').addEventListener('change', displayResults);
     document.getElementById('roiFilter').addEventListener('change', displayResults);
+    document.getElementById('statusFilter').addEventListener('change', displayResults);
     
     // Setup city refresh button listeners (using data-city attribute)
     document.querySelectorAll('.refreshCityBtn').forEach(btn => {
@@ -1038,10 +1055,22 @@ window.addEventListener('load', async () => {
     document.getElementById('inspectCity').addEventListener('change', inspectCityData);
 
     // Load existing data from local database
-    DB.loadIntoMemory(allPriceData, materialPrices);
+    const storedEquipment = DB.getAllEquipmentPrices();
+    const storedMaterials = DB.getAllMaterialPrices();
+    allPriceData = storedEquipment && typeof storedEquipment === 'object' ? storedEquipment : {};
+    materialPrices = storedMaterials && typeof storedMaterials === 'object' ? storedMaterials : {};
+
     updateDbStats();
     updateCachedCitiesList();
     updateMaterialPricesInspector();
+    
+    // If we have cached data, calculate and display results
+    const hasCachedData = Object.values(allPriceData).some(cityData => Object.keys(cityData || {}).length > 0);
+    if (hasCachedData) {
+        console.log('📊 Loading cached results...');
+        calculateResults();
+        displayResults();
+    }
 
     updateCurrentTimeNow();
     
