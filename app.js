@@ -2648,13 +2648,29 @@ function initCraftingTab() {
   }
 
   craftingProfitData = payload.rows;
+
+  const materialBuySelect = document.getElementById("craftMaterialBuyCity");
+  if (materialBuySelect && payload.materialBuyCity) {
+    materialBuySelect.value = payload.materialBuyCity;
+  }
+
+  const sellCitySelect = document.getElementById("craftSellCity");
+  if (sellCitySelect && payload.sellCity) {
+    sellCitySelect.value =
+      payload.sellCity === "Black Market" ? "BlackMarket" : payload.sellCity;
+  }
+
   displayCraftingProfits();
 
   const info = document.getElementById("craftLastUpdateInfo");
   if (info) {
     const count = craftingProfitData.length.toLocaleString();
+    const routeText =
+      payload.materialBuyCity && payload.sellCity
+        ? ` (${payload.materialBuyCity} -> ${payload.sellCity})`
+        : "";
     info.textContent = payload.timestamp
-      ? `Last scan: ${payload.timestamp} (${count} profitable rows cached)`
+      ? `Last scan: ${payload.timestamp}${routeText} (${count} profitable rows cached)`
       : `${count} profitable rows cached`;
   }
 }
@@ -2796,6 +2812,14 @@ async function fetchCraftingProfits() {
   try {
     console.log("🔨 Starting crafting profit scan...");
 
+    const materialBuyCity =
+      document.getElementById("craftMaterialBuyCity")?.value || "Caerleon";
+    const sellCitySelection =
+      document.getElementById("craftSellCity")?.value || "BlackMarket";
+    const isBlackMarketSell = sellCitySelection === "BlackMarket";
+    const sellCityApi = sellCitySelection;
+    const sellCityDisplay = isBlackMarketSell ? "Black Market" : sellCityApi;
+
     const equipmentToRecipeMap = globalThis.EQUIPMENT_TO_RECIPE_MAP;
     const craftingRecipes = globalThis.CRAFTING_RECIPES;
 
@@ -2847,8 +2871,8 @@ async function fetchCraftingProfits() {
       `📊 Total crafting combinations (enhancement × quality): ${finishedItemIds.length * 5}`,
     );
 
-    // Step 1: Fetch material prices from Caerleon
-    setCraftProgress(20, "Fetching material prices from Caerleon...");
+    // Step 1: Fetch material prices from selected material buy city
+    setCraftProgress(20, `Fetching material prices from ${materialBuyCity}...`);
 
     const materialTypes = ["METALBAR", "PLANKS", "LEATHER", "CLOTH"];
     const materialIds = [];
@@ -2864,14 +2888,14 @@ async function fetchCraftingProfits() {
 
     console.log(`📦 Fetching ${materialIds.length} material prices...`);
 
-    const matPricesUrl = `${getApiBase()}/${materialIds.join(",")}.json?locations=Caerleon&qualities=1`;
+    const matPricesUrl = `${getApiBase()}/${materialIds.join(",")}.json?locations=${encodeURIComponent(materialBuyCity)}&qualities=1`;
     const matResponse = await fetch(matPricesUrl);
     const matPrices = await matResponse.json();
 
     // Store material prices
     materialPricesData = {};
     matPrices.forEach((mat) => {
-      if (mat.city === "Caerleon" && mat.sell_price_min > 0) {
+      if (mat.city === materialBuyCity && mat.sell_price_min > 0) {
         materialPricesData[mat.item_id] = {
           price: mat.sell_price_min,
           date: mat.sell_price_min_date,
@@ -2893,14 +2917,14 @@ async function fetchCraftingProfits() {
       const artifactBatchSize = 100;
       for (let i = 0; i < artifactIds.length; i += artifactBatchSize) {
         const batch = artifactIds.slice(i, i + artifactBatchSize);
-        const artifactUrl = `${getApiBase()}/${batch.join(",")}.json?locations=Caerleon&qualities=1`;
+        const artifactUrl = `${getApiBase()}/${batch.join(",")}.json?locations=${encodeURIComponent(materialBuyCity)}&qualities=1`;
         const artifactResponse = await fetch(artifactUrl);
         if (!artifactResponse.ok) {
           throw new Error(`Artifact API error ${artifactResponse.status}`);
         }
         const artifactRows = await artifactResponse.json();
         artifactRows.forEach((row) => {
-          if (row.city !== "Caerleon") return;
+          if (row.city !== materialBuyCity) return;
           const price = getNumericValue(row.sell_price_min);
           if (price <= 0) return;
           materialPricesData[row.item_id] = {
@@ -2915,8 +2939,8 @@ async function fetchCraftingProfits() {
       `✅ Loaded ${Object.keys(materialPricesData).length} material prices`,
     );
 
-    // Step 2: Fetch finished item prices from Black Market
-    setCraftProgress(50, "Fetching finished item prices from Black Market...");
+    // Step 2: Fetch finished item prices from selected sell city
+    setCraftProgress(50, `Fetching finished item prices from ${sellCityDisplay}...`);
 
     console.log(
       `🎯 Fetching ${finishedItemIds.length} finished item IDs across all qualities...`,
@@ -2936,18 +2960,18 @@ async function fetchCraftingProfits() {
         `Fetching batch ${batchNum}/${totalBatches}...`,
       );
 
-      const itemPricesUrl = `${getApiBase()}/${batch.join(",")}.json?locations=BlackMarket&qualities=1,2,3,4,5`;
+      const itemPricesUrl = `${getApiBase()}/${batch.join(",")}.json?locations=${encodeURIComponent(sellCityApi)}&qualities=1,2,3,4,5`;
       const itemResponse = await fetch(itemPricesUrl);
       const itemPrices = await itemResponse.json();
 
       // Calculate profits for this batch
       itemPrices.forEach((item) => {
-        if (
-          item.city !== "Black Market" ||
-          !item.buy_price_max ||
-          item.buy_price_max === 0
-        )
-          return;
+        if (item.city !== sellCityDisplay) return;
+
+        const grossSellPrice = isBlackMarketSell
+          ? getNumericValue(item.buy_price_max)
+          : getNumericValue(item.sell_price_min);
+        if (grossSellPrice <= 0) return;
 
         // Get base item ID and enchantment level from item suffix (@0..@4)
         const baseItemId = item.item_id.split("_LEVEL")[0].split("@")[0];
@@ -2996,12 +3020,12 @@ async function fetchCraftingProfits() {
           primaryMatPrice * recipe.primaryQty +
           secondaryMatPrice * recipe.secondaryQty +
           artifactPrice;
-        const craftingFee = Math.floor(item.buy_price_max * 0.05); // ~5% crafting fee estimate
+        const craftingFee = Math.floor(grossSellPrice * 0.05); // ~5% crafting fee estimate
         const totalCost = totalMaterialCost + craftingFee;
 
-        // Calculate revenue (BM price after 8% tax)
-        const bmSellPrice = item.buy_price_max;
-        const netRevenue = bmSellPrice * 0.92; // 8% tax
+        // Calculate revenue (destination-specific tax)
+        const marketTaxRate = isBlackMarketSell ? 0.08 : CONFIG.TAX_RATE;
+        const netRevenue = grossSellPrice * (1 - marketTaxRate);
 
         const profit = netRevenue - totalCost;
         const roi = totalCost > 0 ? (profit / totalCost) * 100 : 0;
@@ -3023,10 +3047,14 @@ async function fetchCraftingProfits() {
             enchantment: enchantment,
             marketQuality: marketQuality,
             quality: marketQuality,
+            materialBuyCity: materialBuyCity,
+            sellCity: sellCityDisplay,
+            marketTaxRate: marketTaxRate,
             materialCost: totalMaterialCost,
             craftingFee: craftingFee,
             totalCost: totalCost,
-            bmSellPrice: bmSellPrice,
+            sellPrice: grossSellPrice,
+            bmSellPrice: grossSellPrice,
             netRevenue: netRevenue,
             profit: profit,
             roi: roi,
@@ -3039,7 +3067,9 @@ async function fetchCraftingProfits() {
             secondaryMatPrice: secondaryMatPrice,
             artifactId: artifactId,
             artifactPrice: artifactPrice,
-            timestamp: item.buy_price_max_date,
+            timestamp: isBlackMarketSell
+              ? item.buy_price_max_date
+              : item.sell_price_min_date,
           });
         }
       });
@@ -3053,12 +3083,14 @@ async function fetchCraftingProfits() {
     const scanTimestamp = new Date().toLocaleString();
     DB.saveCraftingProfits({
       timestamp: scanTimestamp,
+      materialBuyCity: materialBuyCity,
+      sellCity: sellCityDisplay,
       rows: craftingProfitData,
     });
 
     const info = document.getElementById("craftLastUpdateInfo");
     if (info) {
-      info.textContent = `Last scan: ${scanTimestamp} (${craftingProfitData.length.toLocaleString()} profitable rows cached)`;
+      info.textContent = `Last scan: ${scanTimestamp} (${materialBuyCity} -> ${sellCityDisplay}, ${craftingProfitData.length.toLocaleString()} profitable rows cached)`;
     }
 
     setCraftProgress(100, "Scan complete");
@@ -3218,7 +3250,7 @@ function displayCraftingProfits() {
   html += "<th>Quality</th>";
   html += "<th>Recipe</th>";
   html += `<th class="sortable" onclick="sortCraftingData('cost')">Total Cost ${getSortIcon("cost")}</th>`;
-  html += `<th class="sortable" onclick="sortCraftingData('revenue')">BM Buy Price ${getSortIcon("revenue")}</th>`;
+  html += `<th class="sortable" onclick="sortCraftingData('revenue')">Sell Price ${getSortIcon("revenue")}</th>`;
   html += `<th class="sortable" onclick="sortCraftingData('profit')">Net Profit ${getSortIcon("profit")}</th>`;
   html += `<th class="sortable" onclick="sortCraftingData('roi')">ROI % ${getSortIcon("roi")}</th>`;
   html += "<th>Last Update</th>";
@@ -3238,6 +3270,12 @@ function displayCraftingProfits() {
     const marketQuality = getCraftQuality(item);
     const tierBadgeClass = `tier-${item.tier}`;
     const tierDisplay = `T${item.tier}`;
+    const sellCity = item.sellCity || "Black Market";
+    const materialBuyCity = item.materialBuyCity || "Caerleon";
+    const sellPrice =
+      Number.isFinite(Number(item.sellPrice)) && Number(item.sellPrice) > 0
+        ? Number(item.sellPrice)
+        : Number(item.bmSellPrice || 0);
     const roiClass =
       item.roi >= 50 ? "roi-high" : item.roi >= 20 ? "roi-medium" : "roi-low";
 
@@ -3288,13 +3326,13 @@ function displayCraftingProfits() {
     }
 
     html += `<tr class="profitable">
-            <td><strong>${item.itemName}</strong><br><small class="text-muted">${item.category}</small></td>
+          <td><strong>${item.itemName}</strong><br><small class="text-muted">${item.category} • ${materialBuyCity} → ${sellCity}</small></td>
             <td><span class="tier-badge ${tierBadgeClass}">${tierDisplay}</span></td>
             <td><span class="badge bg-secondary">.${enchantment}</span></td>
             <td><span class="badge bg-info">${qualityNames[marketQuality]} (Q${marketQuality})</span></td>
             <td><small>${recipeText}</small></td>
             <td class="price-col">${item.totalCost.toLocaleString()}<br><small class="text-muted">Mat: ${item.materialCost.toLocaleString()} + Fee: ${item.craftingFee.toLocaleString()}</small></td>
-            <td class="price-col">${item.bmSellPrice.toLocaleString()}<br><small class="text-muted">After Tax: ${item.netRevenue.toLocaleString()}</small></td>
+          <td class="price-col">${sellPrice.toLocaleString()}<br><small class="text-muted">After Tax: ${item.netRevenue.toLocaleString()}</small></td>
             <td class="profit-positive"><strong>+${item.profit.toLocaleString()}</strong></td>
             <td class="roi-value ${roiClass}"><strong>${item.roi.toFixed(2)}%</strong></td>
             <td><small>${timestampText || "-"}</small></td>
@@ -3413,8 +3451,20 @@ function inferWeaponRecipe(baseItemId) {
   }
 
   // Magical staffs and related magical 2H weapons
+  if (/2H_GLACIALSTAFF/.test(noEnchant)) {
+    return {
+      category: "Magic",
+      primary: "PLANKS",
+      secondary: "METALBAR",
+      primaryQty: 20,
+      secondaryQty: 12,
+      craftingFee: 0.05,
+      inferred: true,
+    };
+  }
+
   if (
-    /(NATURESTAFF|HOLYSTAFF|FIRESTAFF|FROSTSTAFF|CURSEDSTAFF|ARCANESTAFF|DIVINESTAFF|DEMONICSTAFF|WITCHWORKSTAFF|LIFETOUCHSTAFF|LIFECURSESTAFF|WILDSTAFF|INFERNALSTAFF|ENIGMATICSTAFF|BRIMSTONE|PERMAFROST|DAWNSONG|EVENSONG|REDEMPTION|FALLENSTAFF|BLIGHTSTAFF|IRONROOTSTAFF|SHAPESHIFTER|ORB)/.test(
+    /(NATURESTAFF|HOLYSTAFF|FIRESTAFF|FROSTSTAFF|GLACIALSTAFF|CURSEDSTAFF|ARCANESTAFF|DIVINESTAFF|DEMONICSTAFF|WITCHWORKSTAFF|LIFETOUCHSTAFF|LIFECURSESTAFF|WILDSTAFF|INFERNALSTAFF|ENIGMATICSTAFF|BRIMSTONE|PERMAFROST|DAWNSONG|EVENSONG|REDEMPTION|FALLENSTAFF|BLIGHTSTAFF|IRONROOTSTAFF|SHAPESHIFTER|ORB)/.test(
       noEnchant,
     )
   ) {
@@ -3533,7 +3583,7 @@ function applyWeaponRecipeOverrides(baseItemId, recipe) {
   });
 
   const isMagicStaff =
-    /(ARCANESTAFF|CURSEDSTAFF|FIRESTAFF|FROSTSTAFF|HOLYSTAFF|NATURESTAFF|DIVINESTAFF|DEMONICSTAFF|WITCHWORKSTAFF|LIFETOUCHSTAFF|LIFECURSESTAFF|WILDSTAFF|INFERNALSTAFF|ENIGMATICSTAFF|BRIMSTONE|PERMAFROST|DAWNSONG|EVENSONG|REDEMPTION|FALLENSTAFF|BLIGHTSTAFF|IRONROOTSTAFF|ORB)/.test(
+    /(ARCANESTAFF|CURSEDSTAFF|FIRESTAFF|FROSTSTAFF|GLACIALSTAFF|HOLYSTAFF|NATURESTAFF|DIVINESTAFF|DEMONICSTAFF|WITCHWORKSTAFF|LIFETOUCHSTAFF|LIFECURSESTAFF|WILDSTAFF|INFERNALSTAFF|ENIGMATICSTAFF|BRIMSTONE|PERMAFROST|DAWNSONG|EVENSONG|REDEMPTION|FALLENSTAFF|BLIGHTSTAFF|IRONROOTSTAFF|ORB)/.test(
       id,
     );
   const isArcaneStaff =
@@ -3685,6 +3735,11 @@ function applyWeaponRecipeOverrides(baseItemId, recipe) {
 
   // All other Cursed = 20 planks + 12 metal
   if (isCursedStaff) {
+    return withOverride("Magic", "PLANKS", "METALBAR", 20, 12);
+  }
+
+  // Glacial Staff is 2H frost line
+  if (/2H_GLACIALSTAFF/.test(id)) {
     return withOverride("Magic", "PLANKS", "METALBAR", 20, 12);
   }
 
