@@ -3,6 +3,7 @@
 ## System Requirements
 
 ### Minimum
+- **Python**: 3.10+ (to run a local HTTP server via `python -m http.server`)
 - **Browser**: Chrome 90+, Firefox 88+, Safari 14+, Edge 90+
 - **OS**: Windows, macOS, Linux (any system with a modern web browser)
 - **RAM**: 256 MB
@@ -10,9 +11,24 @@
 - **Network**: 1 Mbps (for API calls)
 
 ### Recommended
+- **Python**: Latest stable 3.x
 - **Browser**: Latest version of Chrome, Firefox, Safari, or Edge
 - **RAM**: 1 GB+
 - **Network**: 5+ Mbps (for faster data loading)
+
+## Local Setup Commands
+
+Run these in the project folder:
+
+1. Install requirements:
+	- `python -m pip install -r requirements.txt`
+2. Start local server:
+	- `python -m http.server 8090`
+3. Open browser:
+	- `http://localhost:8090`
+
+Note:
+- This project is static HTML/CSS/JS. `requirements.txt` exists for a standard setup workflow and currently contains no third-party runtime dependency.
 
 ## Browser Compatibility
 
@@ -47,6 +63,7 @@
 - `index.html` - User interface
 - `app.js` - Application logic (~1500 lines)
 - `database.js` - Data persistence layer (~175 lines)
+- `requirements.txt` - Python setup entry for local server workflow
 
 ### Data Files (Required)
 - `item_names.json` - Item ID to display name mappings (~60 KB)
@@ -222,4 +239,4 @@ To troubleshoot, have ready:
 
 ---
 
-**Last Updated**: March 3, 2026
+**Last Updated**: March 12, 2026

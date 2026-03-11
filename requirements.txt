@@ -1,0 +1,9 @@
+# Albion Market Profit Suite
+# This project is a static web app.
+# No third-party Python packages are required.
+#
+# Standard setup command:
+#   python -m pip install -r requirements.txt
+#
+# Runtime requirement:
+# - Python 3.10+ (for `python -m http.server`)

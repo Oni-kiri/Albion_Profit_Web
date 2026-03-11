@@ -14,11 +14,22 @@ A browser-based Albion Online market toolkit for enhancement ROI, Black Market f
 
 ## Quick Start
 
-1. Open `index.html` in a browser.
-2. In the top-right corner:
+1. Install Python 3.10+.
+2. Install project requirements:
+  - `python -m pip install -r requirements.txt`
+3. Start a local server from the project folder:
+  - `python -m http.server 8090`
+4. Open this URL in your browser:
+  - `http://localhost:8090`
+5. In the top-right corner:
    - Choose a server from `East / West / Europe`.
    - Choose your preferred mode using the `Light/Dark` toggle.
-3. Use each tab based on your goal.
+6. Use each tab based on your goal.
+
+## Notes For Local Running
+
+- This is a static web app, so Python is only used to host files locally.
+- `requirements.txt` is included for a standard install flow, but no third-party Python package is required for the app itself.
 
 ## How To Use Each Tab
 
