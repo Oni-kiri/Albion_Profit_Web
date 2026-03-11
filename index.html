@@ -1,772 +1,1616 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Albion Equipment Enhancement Profit Calculator</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Albion Market Profit Suite</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
     <style>
-        :root {
-            --primary-color: #1e3c72;
-            --secondary-color: #2a5298;
-            --success-color: #28a745;
-            --warning-color: #ffc107;
-            --danger-color: #dc3545;
-        }
-        
-        body {
-            background-color: #0f1419;
-            color: #e0e0e0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        
-        .navbar {
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        
-        .navbar-brand {
-            font-weight: bold;
-            font-size: 1.5rem;
-        }
-        
-        .card {
-            background-color: #1a232e;
-            border: 1px solid #2d3e50;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        
-        .btn-primary {
-            background-color: var(--secondary-color);
-            border-color: var(--secondary-color);
-        }
-        
-        .btn-primary:hover {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-        }
-        
-        .table-dark {
-            background-color: #1a232e;
-            color: #e0e0e0;
-        }
-        
-        .table-dark thead th {
-            background-color: var(--secondary-color);
-            border-bottom: 2px solid var(--primary-color);
-        }
-        
-        .profitable {
-            background-color: rgba(40, 167, 69, 0.2);
-            border-left: 4px solid #28a745;
-        }
-        
-        .roi-badge {
-            font-weight: bold;
-            padding: 0.5rem 0.75rem;
-            border-radius: 4px;
-        }
-        
-        .roi-high {
-            background-color: #28a745;
-            color: white;
-        }
-        
-        .roi-medium {
-            background-color: #ffc107;
-            color: black;
-        }
-        
-        .roi-low {
-            background-color: #dc3545;
-            color: white;
-        }
-        
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 2rem;
-        }
-        
-        .spinner-border {
-            color: var(--secondary-color);
-        }
+      :root {
+        --primary-color: #1e3c72;
+        --secondary-color: #2a5298;
+        --success-color: #28a745;
+        --warning-color: #ffc107;
+        --danger-color: #dc3545;
+        --bg-main: #0f1419;
+        --bg-panel: #1a232e;
+        --text-main: #e0e0e0;
+        --border-main: #2d3e50;
+      }
 
-        .progress-container {
-            display: none;
-            margin-top: 1rem;
-            padding: 1.5rem;
-            background-color: #252f3a;
-            border-radius: 8px;
-            border: 1px solid #2d3e50;
-        }
+      body {
+        background-color: var(--bg-main);
+        color: var(--text-main);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
 
-        .progress-bar-animated {
-            background: linear-gradient(90deg, var(--secondary-color), #00d4ff);
-        }
+      .navbar {
+        background: linear-gradient(
+          135deg,
+          var(--primary-color) 0%,
+          var(--secondary-color) 100%
+        );
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
 
-        .progress-stats {
-            margin-top: 1rem;
-            font-size: 0.9rem;
-            color: #aaa;
-        }
+      .navbar-brand {
+        font-weight: bold;
+        font-size: 1.5rem;
+      }
 
-        .nav-tabs .nav-link {
-            color: #cfd8e3;
-            border-color: #2d3e50 #2d3e50 transparent;
-        }
+      .card {
+        background-color: var(--bg-panel);
+        border: 1px solid var(--border-main);
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
 
-        .nav-tabs .nav-link.active {
-            color: #fff;
-            background-color: #1a232e;
-            border-color: #2d3e50 #2d3e50 #1a232e;
-        }
+      .btn-primary {
+        background-color: var(--secondary-color);
+        border-color: var(--secondary-color);
+      }
 
-        .tab-content {
-            background-color: #1a232e;
-            border: 1px solid #2d3e50;
-            border-top: none;
-            padding: 1.5rem;
-            border-radius: 0 0 8px 8px;
-        }
-        
-        .filter-section {
-            background-color: #1a232e;
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-bottom: 2rem;
-            border: 1px solid #2d3e50;
-        }
-        
-        .stats-box {
-            background-color: var(--secondary-color);
-            color: white;
-            padding: 1rem;
-            border-radius: 8px;
-            text-align: center;
-            margin-bottom: 1rem;
-        }
-        
-        .refresh-info {
-            background-color: #2d3e50;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            border-left: 4px solid var(--secondary-color);
-        }
-        
-        .enhancement-formula {
-            background-color: #252f3a;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            border-left: 4px solid var(--warning-color);
-            font-family: 'Courier New', monospace;
-            font-size: 0.9rem;
-        }
-        
-        .city-section {
-            margin-top: 2rem;
-            padding: 1.5rem;
-            background-color: #1a232e;
-            border-radius: 8px;
-            border: 1px solid #2d3e50;
-        }
-        
-        .city-title {
-            color: var(--secondary-color);
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin-bottom: 1rem;
-            border-bottom: 2px solid var(--secondary-color);
-            padding-bottom: 0.5rem;
-        }
-        
-        .no-data {
-            text-align: center;
-            padding: 2rem;
-            color: #888;
-            font-style: italic;
-        }
-        
-        .col-tier, .col-enhancement, .col-roi {
-            text-align: center;
-        }
-        
-        .enhancement-level {
-            display: inline-block;
-            background-color: var(--primary-color);
-            color: white;
-            padding: 0.25rem 0.5rem;
-            border-radius: 3px;
-            font-weight: bold;
-        }
+      .btn-primary:hover {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+      }
 
-        .row-no-price {
-            background-color: rgba(220, 53, 69, 0.2) !important;
-            border-left: 4px solid #dc3545 !important;
-        }
+      .table-dark {
+        background-color: var(--bg-panel);
+        color: #e0e0e0;
+      }
 
-        .row-outdated {
-            background-color: rgba(255, 193, 7, 0.2) !important;
-            border-left: 4px solid #ffc107 !important;
-        }
+      .table-dark thead th {
+        background-color: var(--secondary-color);
+        border-bottom: 2px solid var(--primary-color);
+      }
 
-        /* Zebra striping */
-        table tbody tr:nth-child(odd) { background-color: #151c24; }
-        table tbody tr:nth-child(even) { background-color: #1a232e; }
-        table tbody tr:hover { background-color: #1f2d3a !important; }
+      .profitable {
+        background-color: rgba(40, 167, 69, 0.2);
+        border-left: 4px solid #28a745;
+      }
 
-        /* Tier badges with colors */
-        .tier-badge {
-            display: inline-block;
-            padding: 0.35rem 0.6rem;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 0.85rem;
-            min-width: 60px;
-            text-align: center;
-        }
-        .tier-4 { background-color: #dc3545; color: white; }
-        .tier-5 { background-color: #0d6efd; color: white; }
-        .tier-6 { background-color: #6f42c1; color: white; }
-        .tier-7 { background-color: #ffc107; color: black; }
-        .tier-8 { background-color: #e91e63; color: white; }
-        
-        /* Sortable table headers */
-        .sortable {
-            cursor: pointer;
-            user-select: none;
-            position: relative;
-            padding-right: 25px !important;
-        }
-        .sortable:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-        .sort-arrow {
-            color: #ffc107;
-            font-size: 0.8rem;
-            margin-left: 5px;
-        }
-        .sort-arrows {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.8rem;
-            margin-left: 5px;
-        }
+      .roi-badge {
+        font-weight: bold;
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+      }
 
-        /* Category badges */
-        .category-badge {
-            display: inline-block;
-            padding: 0.25rem 0.5rem;
-            border-radius: 3px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-        .cat-weapon { background-color: rgba(255, 107, 107, 0.3); color: #ff6b6b; }
-        .cat-helmet { background-color: rgba(70, 130, 180, 0.3); color: #4682b4; }
-        .cat-armor { background-color: rgba(34, 139, 34, 0.3); color: #22a722; }
-        .cat-shoes { background-color: rgba(255, 140, 0, 0.3); color: #ff8c00; }
-        .cat-cape { background-color: rgba(147, 51, 234, 0.3); color: #9333ea; }
-        .cat-offhand { background-color: rgba(59, 130, 246, 0.3); color: #3b82f6; }
+      .roi-high {
+        background-color: #28a745;
+        color: white;
+      }
 
-        /* Price styling - monospace */
-        .price-col {
-            font-family: 'Courier New', monospace;
-            text-align: right;
-            font-weight: 500;
-        }
+      .roi-medium {
+        background-color: #ffc107;
+        color: black;
+      }
 
-        /* Data timestamp indicator */
-        .data-timestamp {
-            display: inline-block;
-            padding: 0.2rem 0.4rem;
-            background-color: #2d3e50;
-            border-radius: 3px;
-            font-size: 0.75rem;
-            margin-left: 0.3rem;
-        }
-        .data-fresh { color: #28a745; }
-        .data-old { color: #ffc107; }
-        .data-missing { color: #dc3545; }
+      .roi-low {
+        background-color: #dc3545;
+        color: white;
+      }
 
-        /* Item count badge */
-        .item-count-badge {
-            display: inline-block;
-            background-color: var(--primary-color);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            margin-left: 0.5rem;
-        }
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 2rem;
+      }
 
-        /* Empty state */
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #888;
-        }
-        .empty-state-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
-        .empty-state-text { font-size: 1.1rem; margin-bottom: 0.5rem; }
-        .empty-state-hint { font-size: 0.9rem; color: #666; font-style: italic; }
+      .spinner-border {
+        color: var(--secondary-color);
+      }
 
-        /* Better table spacing */
-        table td, table th { padding: 0.75rem !important; vertical-align: middle; }
-        table thead th { font-size: 0.9rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+      .progress-container {
+        display: none;
+        margin-top: 1rem;
+        padding: 1.5rem;
+        background-color: #252f3a;
+        border-radius: 8px;
+        border: 1px solid #2d3e50;
+      }
 
-        /* Inspection table scrolling - fixed height with sticky header */
-        #cityDataInspector .table-responsive {
-            max-height: 600px;
-            overflow-y: auto;
-            border: 1px solid #2d3e50;
-            border-radius: 4px;
-        }
-        
-        #cityDataInspector table thead th {
-            position: sticky;
-            top: 0;
-            background-color: #2a5298 !important;
-            z-index: 10;
-            border-bottom: 2px solid #1a232e;
-        }
-        
-        #cityDataInspector table tbody tr {
-            height: auto;
-        }
-        
-        /* Ensure minimum 10 rows visible (~60px per row = 600px) */
-        #cityDataInspector .table-responsive {
-            min-height: 420px;
-        }
+      .progress-bar-animated {
+        background: linear-gradient(90deg, var(--secondary-color), #00d4ff);
+      }
 
-        /* City header */
-        .city-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 0.75rem;
-            border-bottom: 2px solid var(--secondary-color);
-        }
-        .city-header-title { font-size: 1.3rem; font-weight: bold; color: var(--secondary-color); margin: 0; }
-        .city-header-meta { font-size: 0.85rem; color: #999; }
+      .progress-stats {
+        margin-top: 1rem;
+        font-size: 0.9rem;
+        color: #aaa;
+      }
 
-        /* Sticky filter bar */
-        .sticky-filters {
-            position: sticky;
-            top: 0;
-            background-color: #1a232e;
-            border: 1px solid #2d3e50;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            border-radius: 8px;
-            z-index: 100;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      .nav-tabs .nav-link {
+        color: #cfd8e3;
+        border-color: #2d3e50 #2d3e50 transparent;
+      }
+
+      .nav-tabs .nav-link.active {
+        color: #fff;
+        background-color: #1a232e;
+        border-color: #2d3e50 #2d3e50 #1a232e;
+      }
+
+      .tab-content {
+        background-color: var(--bg-panel);
+        border: 1px solid var(--border-main);
+        border-top: none;
+        padding: 1.5rem;
+        border-radius: 0 0 8px 8px;
+      }
+
+      .filter-section {
+        background-color: var(--bg-panel);
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+        border: 1px solid var(--border-main);
+      }
+
+      .tab-guide {
+        background: rgba(42, 82, 152, 0.2);
+        border: 1px solid rgba(42, 82, 152, 0.45);
+        border-radius: 10px;
+        padding: 0.9rem 1rem;
+        margin-bottom: 1rem;
+        line-height: 1.45;
+      }
+
+      .tab-guide strong {
+        color: #f3f8ff;
+      }
+
+      .stats-box {
+        background-color: var(--secondary-color);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+        margin-bottom: 1rem;
+      }
+
+      .refresh-info {
+        background-color: #2d3e50;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        border-left: 4px solid var(--secondary-color);
+      }
+
+      .enhancement-formula {
+        background-color: #252f3a;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        border-left: 4px solid var(--warning-color);
+        font-family: "Courier New", monospace;
+        font-size: 0.9rem;
+      }
+
+      .city-section {
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background-color: #1a232e;
+        border-radius: 8px;
+        border: 1px solid #2d3e50;
+      }
+
+      .city-title {
+        color: var(--secondary-color);
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid var(--secondary-color);
+        padding-bottom: 0.5rem;
+      }
+
+      .no-data {
+        text-align: center;
+        padding: 2rem;
+        color: #888;
+        font-style: italic;
+      }
+
+      .col-tier,
+      .col-enhancement,
+      .col-roi {
+        text-align: center;
+      }
+
+      .enhancement-level {
+        display: inline-block;
+        background-color: var(--primary-color);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 3px;
+        font-weight: bold;
+      }
+
+      .row-no-price {
+        background-color: rgba(220, 53, 69, 0.2) !important;
+        border-left: 4px solid #dc3545 !important;
+      }
+
+      .row-outdated {
+        background-color: rgba(255, 193, 7, 0.2) !important;
+        border-left: 4px solid #ffc107 !important;
+      }
+
+      /* Zebra striping */
+      table tbody tr:nth-child(odd) {
+        background-color: #151c24;
+      }
+      table tbody tr:nth-child(even) {
+        background-color: #1a232e;
+      }
+      table tbody tr:hover {
+        background-color: #1f2d3a !important;
+      }
+
+      /* Tier badges with colors */
+      .tier-badge {
+        display: inline-block;
+        padding: 0.35rem 0.6rem;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 0.85rem;
+        min-width: 60px;
+        text-align: center;
+      }
+      .tier-4 {
+        background-color: #0d6efd;
+        color: white;
+      }
+      .tier-5 {
+        background-color: #dc3545;
+        color: white;
+      }
+      .tier-6 {
+        background-color: #fd7e14;
+        color: white;
+      }
+      .tier-7 {
+        background-color: #ffc107;
+        color: black;
+      }
+      .tier-8 {
+        background-color: #e91e63;
+        color: white;
+      }
+
+      /* Sortable table headers */
+      .sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        padding-right: 25px !important;
+      }
+      .sortable:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+      .sort-arrow {
+        color: #ffc107;
+        font-size: 0.8rem;
+        margin-left: 5px;
+      }
+      .sort-arrows {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 0.8rem;
+        margin-left: 5px;
+      }
+
+      /* Category badges */
+      .category-badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 3px;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+      .cat-weapon {
+        background-color: rgba(255, 107, 107, 0.3);
+        color: #ff6b6b;
+      }
+      .cat-helmet {
+        background-color: rgba(70, 130, 180, 0.3);
+        color: #4682b4;
+      }
+      .cat-armor {
+        background-color: rgba(34, 139, 34, 0.3);
+        color: #22a722;
+      }
+      .cat-shoes {
+        background-color: rgba(255, 140, 0, 0.3);
+        color: #ff8c00;
+      }
+      .cat-cape {
+        background-color: rgba(147, 51, 234, 0.3);
+        color: #9333ea;
+      }
+      .cat-offhand {
+        background-color: rgba(59, 130, 246, 0.3);
+        color: #3b82f6;
+      }
+
+      /* Price styling - monospace */
+      .price-col {
+        font-family: "Courier New", monospace;
+        text-align: right;
+        font-weight: 500;
+      }
+
+      /* Profit column styling */
+      .profit-positive {
+        font-family: "Courier New", monospace;
+        text-align: right;
+        font-weight: 500;
+        color: #28a745;
+      }
+
+      /* ROI value styling */
+      .roi-value {
+        font-family: "Courier New", monospace;
+        text-align: center;
+        font-weight: 500;
+        padding: 0.5rem !important;
+        border-radius: 4px;
+      }
+
+      /* Data timestamp indicator */
+      .data-timestamp {
+        display: inline-block;
+        padding: 0.2rem 0.4rem;
+        background-color: #2d3e50;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        margin-left: 0.3rem;
+      }
+      .data-fresh {
+        color: #28a745;
+      }
+      .data-old {
+        color: #ffc107;
+      }
+      .data-missing {
+        color: #dc3545;
+      }
+
+      /* Item count badge */
+      .item-count-badge {
+        display: inline-block;
+        background-color: var(--primary-color);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-left: 0.5rem;
+      }
+
+      /* Empty state */
+      .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #888;
+      }
+      .empty-state-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+      }
+      .empty-state-text {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+      }
+      .empty-state-hint {
+        font-size: 0.9rem;
+        color: #666;
+        font-style: italic;
+      }
+
+      /* Better table spacing */
+      table td,
+      table th {
+        padding: 0.75rem !important;
+        vertical-align: middle;
+      }
+      table thead th {
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      /* Inspection table scrolling - fixed height with sticky header */
+      #cityDataInspector .table-responsive {
+        max-height: 600px;
+        overflow-y: auto;
+        border: 1px solid #2d3e50;
+        border-radius: 4px;
+      }
+
+      #cityDataInspector table thead th {
+        position: sticky;
+        top: 0;
+        background-color: #2a5298 !important;
+        z-index: 10;
+        border-bottom: 2px solid #1a232e;
+      }
+
+      #cityDataInspector table tbody tr {
+        height: auto;
+      }
+
+      /* Ensure minimum 10 rows visible (~60px per row = 600px) */
+      #cityDataInspector .table-responsive {
+        min-height: 420px;
+      }
+
+      /* City header */
+      .city-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid var(--secondary-color);
+      }
+      .city-header-title {
+        font-size: 1.3rem;
+        font-weight: bold;
+        color: var(--secondary-color);
+        margin: 0;
+      }
+      .city-header-meta {
+        font-size: 0.85rem;
+        color: #999;
+      }
+
+      /* Sticky filter bar */
+      .sticky-filters {
+        position: sticky;
+        top: 0;
+        background-color: #1a232e;
+        border: 1px solid #2d3e50;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 8px;
+        z-index: 100;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+
+      .weapon-group-list {
+        display: grid;
+        gap: 1.25rem;
+      }
+
+      .weapon-group-card {
+        background: linear-gradient(
+          180deg,
+          rgba(42, 82, 152, 0.16),
+          rgba(15, 20, 25, 0.35)
+        );
+        border: 1px solid #2d3e50;
+        border-radius: 12px;
+        padding: 1rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+      }
+
+      .weapon-group-header {
+        display: grid;
+        grid-template-columns: minmax(220px, 280px) 1fr;
+        gap: 1rem;
+        align-items: start;
+        margin-bottom: 1rem;
+      }
+
+      .weapon-group-title {
+        margin: 0;
+        font-size: 1.35rem;
+        color: #ffffff;
+      }
+
+      .weapon-group-subtitle {
+        color: #9fb3c8;
+        font-size: 0.9rem;
+        margin-top: 0.35rem;
+      }
+
+      .weapon-recipe-panel {
+        background-color: rgba(12, 18, 24, 0.72);
+        border: 1px solid #31465d;
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+      }
+
+      .weapon-recipe-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 0.55rem;
+      }
+
+      .recipe-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.7rem;
+        border-radius: 999px;
+        background-color: rgba(42, 82, 152, 0.28);
+        border: 1px solid rgba(0, 212, 255, 0.18);
+        color: #e8f3ff;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+
+      .weapon-recipe-note {
+        color: #9fb3c8;
+        font-size: 0.85rem;
+        line-height: 1.4;
+      }
+
+      .weapon-matrix-wrap {
+        border: 1px solid #2d3e50;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .weapon-matrix-table {
+        margin-bottom: 0;
+      }
+
+      .weapon-matrix-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background-color: #284a86;
+      }
+
+      .weapon-matrix-table td,
+      .weapon-matrix-table th {
+        white-space: nowrap;
+        text-align: center;
+      }
+
+      .weapon-price-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.18rem;
+        min-width: 118px;
+      }
+
+      .weapon-cell-price {
+        font-size: 0.98rem;
+        font-weight: 700;
+        color: #ffffff;
+      }
+
+      .weapon-cell-meta {
+        font-size: 0.72rem;
+        line-height: 1.2;
+        color: #9fb3c8;
+      }
+
+      .weapon-cell-diff {
+        font-size: 0.75rem;
+        line-height: 1.2;
+        font-weight: 700;
+      }
+
+      .weapon-city-line {
+        font-size: 0.7rem;
+        line-height: 1.15;
+        color: #9fb3c8;
+        white-space: nowrap;
+      }
+
+      .weapon-cost-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.18rem;
+        align-items: flex-start;
+        min-width: 260px;
+      }
+
+      .weapon-cost-line {
+        font-size: 0.72rem;
+        line-height: 1.2;
+        color: #cfd8e3;
+        white-space: nowrap;
+      }
+
+      .weapon-cost-city {
+        color: #9fb3c8;
+        font-weight: 700;
+      }
+
+      .weapon-cost-total {
+        color: #ffffff;
+        font-weight: 700;
+      }
+
+      .weapon-matrix-table td:first-child,
+      .weapon-matrix-table th:first-child {
+        text-align: left;
+      }
+
+      .matrix-fresh {
+        color: #dff7e6;
+      }
+
+      .matrix-old {
+        color: #ffe59a;
+      }
+
+      .matrix-missing {
+        color: #8a94a1;
+      }
+
+      .city-diff-positive {
+        color: #7ee787;
+      }
+
+      .city-diff-negative {
+        color: #ff8b8b;
+      }
+
+      @media (max-width: 992px) {
+        .weapon-group-header {
+          grid-template-columns: 1fr;
         }
+      }
+
+      body[data-theme="light"] {
+        --bg-main: #f4f7fb;
+        --bg-panel: #ffffff;
+        --text-main: #1f2933;
+        --border-main: #d7e0eb;
+      }
+
+      body[data-theme="light"] .table-dark {
+        color: #1f2933;
+      }
+
+      body[data-theme="light"] .table-dark thead th,
+      body[data-theme="light"] .weapon-matrix-table thead th {
+        color: #ffffff;
+      }
+
+      body[data-theme="light"] .nav-tabs .nav-link {
+        color: #334e68;
+      }
+
+      body[data-theme="light"] .nav-tabs .nav-link.active {
+        color: #102a43;
+      }
+
+      body[data-theme="light"] .text-muted {
+        color: #5f6c7b !important;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <!-- Navigation -->
     <nav class="navbar navbar-dark">
-        <div class="container-fluid">
-            <span class="navbar-brand">⚔️ Albion Enhancement Profit Calculator</span>
-            <span class="text-light">Asia Server</span>
+      <div class="container-fluid">
+        <span class="navbar-brand">⚔️ Albion Market Profit Suite</span>
+        <div class="d-flex align-items-center gap-2">
+          <span id="activeServerLabel" class="text-light small">East (Asia)</span>
+          <select id="serverSelect" class="form-select form-select-sm" style="min-width: 170px">
+            <option value="east">East (Asia)</option>
+            <option value="west">West (Americas)</option>
+            <option value="europe">Europe</option>
+          </select>
+          <button id="themeToggle" class="btn btn-outline-light btn-sm" type="button">☀️ Light</button>
         </div>
+      </div>
     </nav>
 
     <!-- Main Container -->
     <div class="container-fluid mt-4">
-        <!-- Loading Indicator -->
-        <div id="loadingIndicator" class="loading">
+      <!-- Tabs for Main Sections -->
+      <ul
+        class="nav nav-tabs nav-fill mb-4"
+        id="mainTabs"
+        role="tablist"
+        style="border-bottom: 3px solid #2a5298"
+      >
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link active"
+            id="profit-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#profit-pane"
+            type="button"
+            role="tab"
+            aria-controls="profit-pane"
+            aria-selected="true"
+            style="font-size: 1.1rem; font-weight: 600"
+          >
+            📈 Enhancement Profit
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="blackmarket-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#blackmarket-pane"
+            type="button"
+            role="tab"
+            aria-controls="blackmarket-pane"
+            aria-selected="false"
+            style="font-size: 1.1rem; font-weight: 600"
+          >
+            🏪 Black Market Flip
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="crafting-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#crafting-pane"
+            type="button"
+            role="tab"
+            aria-controls="crafting-pane"
+            aria-selected="false"
+            style="font-size: 1.1rem; font-weight: 600"
+          >
+            🔨 Crafting Profit
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="weapons-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#weapons-pane"
+            type="button"
+            role="tab"
+            aria-controls="weapons-pane"
+            aria-selected="false"
+            style="font-size: 1.1rem; font-weight: 600"
+          >
+            ⚔️ Weapon Prices
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="matprice-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#matprice-pane"
+            type="button"
+            role="tab"
+            aria-controls="matprice-pane"
+            aria-selected="false"
+            style="font-size: 1.1rem; font-weight: 600"
+          >
+            💎 Material Prices
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="validation-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#validation-pane"
+            type="button"
+            role="tab"
+            aria-controls="validation-pane"
+            aria-selected="false"
+            style="font-size: 1.1rem; font-weight: 600"
+          >
+            ✅ Data Validation
+          </button>
+        </li>
+      </ul>
+
+      <!-- Tab Content  -->
+      <div class="tab-content" id="mainTabsContent">
+        <!-- PROFIT RESULTS TAB -->
+        <div
+          class="tab-pane fade show active"
+          id="profit-pane"
+          role="tabpanel"
+          aria-labelledby="profit-tab"
+        >
+          <div class="tab-guide">
+            <strong>How To Use This Tab:</strong> Select one city to refresh prices, then use filters to compare enhancement ROI. Results and source data are cached locally for the selected server, so reopening the tab shows tables immediately without re-fetching.
+          </div>
+          <!-- City Refresh Buttons - ONLY in Profit Results -->
+          <div class="filter-section mb-4">
+            <h5 class="mb-3">📍 Select City to Refresh</h5>
+            <div class="btn-group flex-wrap" role="group">
+              <button
+                type="button"
+                class="btn btn-outline-primary refreshCityBtn"
+                data-city="Fort Sterling"
+              >
+                🔄 Fort Sterling
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-primary refreshCityBtn"
+                data-city="Lymhurst"
+              >
+                🔄 Lymhurst
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-primary refreshCityBtn"
+                data-city="Bridgewatch"
+              >
+                🔄 Bridgewatch
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-primary refreshCityBtn"
+                data-city="Martlock"
+              >
+                🔄 Martlock
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-primary refreshCityBtn"
+                data-city="Thetford"
+              >
+                🔄 Thetford
+              </button>
+            </div>
+            <button id="exportBtn" class="btn btn-success ms-2">
+              💾 Export to CSV
+            </button>
+          </div>
+
+          <!-- Loading Indicator for Enhancement Fetch -->
+          <div id="loadingIndicator" class="loading mb-3">
             <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-3">Fetching data from Albion Online API...</p>
-
-                <!-- Progress Bar -->
-                <div id="progressContainer" class="progress-container">
-                    <div class="row mb-2">
-                        <div class="col-md-8">
-                            <div class="progress" style="height: 25px;">
-                                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                                    <span id="progressPercent" style="color: white; font-weight: bold;">0%</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="progress-stats">
-                                <span id="progressText">Initializing...</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="progress-stats">
-                        📍 <span id="currentCity">Waiting...</span> | 
-                        📦 Chunk <span id="currentChunk">0</span>/<span id="totalChunks">0</span> |
-                        ⏱️  <span id="elapsedTime">0s</span>
-                    </div>
-                </div>
-        </div>
-
-        <!-- Refresh Info -->
-        <div id="refreshInfo" class="refresh-info" style="display: none;">
-            <strong>Current Time:</strong> <span id="currentTimeNow">-</span><br>
-            <strong>Last Updated:</strong> <span id="lastUpdateTime">Never</span> 
-            <span id="minutesAgo" style="color: #aaa;"></span>
-        </div>
-
-        <!-- Empty State Message -->
-        <div id="emptyStateMessage" class="empty-state" style="display: none;">
-            <div class="empty-state-icon">📊</div>
-            <div class="empty-state-text"><strong>No data loaded yet</strong></div>
-            <div class="empty-state-hint">Click a city button above to fetch prices from Albion Online</div>
-        </div>
-
-        <!-- Enhancement Formula Info -->
-        <div class="enhancement-formula">
-            <strong>📊 Enhancement Formula:</strong><br>
-            Enhancement Cost = Base Item Price + (Material Quantity × Material Price)<br>
-            Revenue = Enhanced Item Sell Price × 0.9 (after 10% tax)<br>
-            Profit = Revenue - Enhancement Cost<br>
-            ROI (%) = (Profit / Enhancement Cost) × 100
-        </div>
-
-        <!-- Tabs for Main Sections -->
-        <ul class="nav nav-tabs nav-fill mb-4" id="mainTabs" role="tablist" style="border-bottom: 3px solid #2a5298;">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="profit-tab" data-bs-toggle="tab" data-bs-target="#profit-pane" type="button" role="tab" aria-controls="profit-pane" aria-selected="true" style="font-size: 1.1rem; font-weight: 600;">
-                    � Enhancement Profit
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="blackmarket-tab" data-bs-toggle="tab" data-bs-target="#blackmarket-pane" type="button" role="tab" aria-controls="blackmarket-pane" aria-selected="false" style="font-size: 1.1rem; font-weight: 600;">
-                    🏪 Black Market Flip
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="validation-tab" data-bs-toggle="tab" data-bs-target="#validation-pane" type="button" role="tab" aria-controls="validation-pane" aria-selected="false" style="font-size: 1.1rem; font-weight: 600;">
-                    ✅ Data Validation
-                </button>
-            </li>
-        </ul>
-
-        <!-- Tab Content  -->
-        <div class="tab-content" id="mainTabsContent">
-            <!-- PROFIT RESULTS TAB -->
-            <div class="tab-pane fade show active" id="profit-pane" role="tabpanel" aria-labelledby="profit-tab">
-                <!-- City Refresh Buttons - ONLY in Profit Results -->
-                <div class="filter-section mb-4">
-                    <h5 class="mb-3">📍 Select City to Refresh</h5>
-                    <div class="btn-group flex-wrap" role="group">
-                        <button type="button" class="btn btn-outline-primary refreshCityBtn" data-city="Fort Sterling">
-                            🔄 Fort Sterling
-                        </button>
-                        <button type="button" class="btn btn-outline-primary refreshCityBtn" data-city="Lymhurst">
-                            🔄 Lymhurst
-                        </button>
-                        <button type="button" class="btn btn-outline-primary refreshCityBtn" data-city="Bridgewatch">
-                            🔄 Bridgewatch
-                        </button>
-                        <button type="button" class="btn btn-outline-primary refreshCityBtn" data-city="Martlock">
-                            🔄 Martlock
-                        </button>
-                        <button type="button" class="btn btn-outline-primary refreshCityBtn" data-city="Thetford">
-                            🔄 Thetford
-                        </button>
-                    </div>
-                    <button id="exportBtn" class="btn btn-success ms-2">
-                        💾 Export to CSV
-                    </button>
-                </div>
-
-                <!-- Profit Results Filters -->
-                <div class="filter-section mb-4">
-                    <h5 class="mb-3">📊 Filters for Profit Results</h5>
-                    <div class="row mb-3">
-                        <div class="col-md-3">
-                            <label for="citySelect" class="form-label">Filter by City:</label>
-                            <select id="citySelect" class="form-select">
-                                <option value="">All Cities</option>
-                                <option value="Fort Sterling">Fort Sterling</option>
-                                <option value="Lymhurst">Lymhurst</option>
-                                <option value="Bridgewatch">Bridgewatch</option>
-                                <option value="Martlock">Martlock</option>
-                                <option value="Thetford">Thetford</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="tierSelect" class="form-label">Filter by Tier:</label>
-                            <select id="tierSelect" class="form-select">
-                                <option value="">All Tiers (4-7)</option>
-                                <option value="4">Tier 4 (Adept)</option>
-                                <option value="5">Tier 5 (Expert)</option>
-                                <option value="6">Tier 6 (Master)</option>
-                                <option value="7">Tier 7 (Grandmaster)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="categorySelect" class="form-label">Filter by Category:</label>
-                            <select id="categorySelect" class="form-select">
-                                <option value="">All Categories</option>
-                                <option value="weapon">Weapons</option>
-                                <option value="helmet">Helmets</option>
-                                <option value="armor">Armor</option>
-                                <option value="shoes">Shoes</option>
-                                <option value="cape">Capes</option>
-                                <option value="offhand">Off-hands</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="roiFilter" class="form-label">Minimum ROI (%):</label>
-                            <input type="number" id="roiFilter" class="form-control" value="15" min="0" max="100">
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-3">
-                            <label for="statusFilter" class="form-label">Data Status:</label>
-                            <select id="statusFilter" class="form-select">
-                                <option value="all">📊 All Data</option>
-                                <option value="fresh">✅ Fresh Data Only (≤24h)</option>
-                                <option value="old">⚠️ Old Data Only (>24h)</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Refresh Info -->
-                <div id="refreshInfo" class="refresh-info" style="display: none;">
-                    <strong>Current Time:</strong> <span id="currentTimeNow">-</span><br>
-                    <strong>Last Updated:</strong> <span id="lastUpdateTime">Never</span> 
-                    <span id="minutesAgo" style="color: #aaa;"></span>
-                </div>
-
-                <!-- Enhancement Formula Info -->
-                <div class="enhancement-formula">
-                    <strong>📊 Enhancement Formula:</strong><br>
-                    Enhancement Cost = Base Item Price + (Material Quantity × Material Price)<br>
-                    Revenue = Enhanced Item Sell Price × 0.9 (after 10% tax)<br>
-                    Profit = Revenue - Enhancement Cost<br>
-                    ROI (%) = (Profit / Enhancement Cost) × 100
-                </div>
-
-                <!-- Results Container -->
-                <div id="resultsContainer"></div>
-
-                <!-- Empty State Message -->
-                <div id="emptyStateMessage" class="empty-state" style="display: none;">
-                    <div class="empty-state-icon">📊</div>
-                    <div class="empty-state-text"><strong>No data loaded yet</strong></div>
-                    <div class="empty-state-hint">Click a city button above to fetch prices from Albion Online</div>
-                </div>
-            </div>
-
-            <!-- BLACK MARKET FLIP TAB -->
-            <div class="tab-pane fade" id="blackmarket-pane" role="tabpanel" aria-labelledby="blackmarket-tab">
-                <div class="filter-section mb-4 mt-4">
-                    <h5 class="mb-3">🏪 Caerleon ⟷ Black Market Safe Flip</h5>
-                    <p class="text-muted">Zero-risk arbitrage: Buy in Caerleon player market → Sell instantly to Black Market NPC. Shows only profitable items.</p>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-3">
-                            <label for="bmTierSelect" class="form-label">Filter by Tier:</label>
-                            <select id="bmTierSelect" class="form-select">
-                                <option value="">All Tiers (4-8)</option>
-                                <option value="4">Tier 4 (Adept)</option>
-                                <option value="5">Tier 5 (Expert)</option>
-                                <option value="6">Tier 6 (Master)</option>
-                                <option value="7">Tier 7 (Grandmaster)</option>
-                                <option value="8">Tier 8 (Legendary)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="bmEnchantmentSelect" class="form-label">Filter by Enhancement:</label>
-                            <select id="bmEnchantmentSelect" class="form-select">
-                                <option value="">All Enhancements (.0 - .4)</option>
-                                <option value="0">.0 (Base)</option>
-                                <option value="1">.1 (Enchanted)</option>
-                                <option value="2">.2 (Rare)</option>
-                                <option value="3">.3 (Exceptional)</option>
-                                <option value="4">.4 (Pristine)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="bmQualitySelect" class="form-label">Filter by Quality:</label>
-                            <select id="bmQualitySelect" class="form-select">
-                                <option value="">All Qualities (1-5)</option>
-                                <option value="1">Normal (Quality 1)</option>
-                                <option value="2">Good (Quality 2)</option>
-                                <option value="3">Excellent (Quality 3)</option>
-                                <option value="4">Masterpiece (Quality 4)</option>
-                                <option value="5">Unique (Quality 5)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="bmMinRoiFilter" class="form-label">Minimum ROI (%):</label>
-                            <input type="number" id="bmMinRoiFilter" class="form-control" value="5" min="0" max="1000">
-                        </div>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-3">
-                            <label for="bmMaxResults" class="form-label">Max Results:</label>
-                            <select id="bmMaxResults" class="form-select">
-                                <option value="25">Top 25</option>
-                                <option value="50">Top 50</option>
-                                <option value="100">Top 100</option>
-                                <option value="250">Top 250</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <button id="scanBlackMarketBtn" class="btn btn-warning btn-lg">
-                        🔍 Scan Black Market Flips
-                    </button>
-                    <button id="autoRefreshBMBtn" class="btn btn-info ms-2">
-                        🔄 Auto Refresh (30s)
-                    </button>
-                </div>
-
-                <!-- Black Market Formula Info -->
-                <div class="enhancement-formula">
-                    <strong>🏪 Black Market Flip Formula:</strong><br>
-                    Buy Price = Caerleon market sell_price_min<br>
-                    Sell Price = Black Market buy_price_max<br>
-                    Tax = 8% (4% with Premium)<br>
-                    Net Profit = (Sell Price × 0.92) - Buy Price<br>
-                    ROI (%) = (Net Profit / Buy Price) × 100
-                </div>
-
-                <!-- Progress Bar for Black Market Scan -->
-                <div id="bmProgressContainer" class="progress-container" style="display: none;">
-                    <div class="row mb-2">
-                        <div class="col-md-8">
-                            <div class="progress" style="height: 25px;">
-                                <div id="bmProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%; background-color: #ffc107;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                                    <span id="bmProgressPercent" style="color: black; font-weight: bold;">0%</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="progress-stats">
-                                <span id="bmProgressText">Initializing...</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="progress-stats">
-                        🔍 <span id="bmCurrentBatch">0</span>/<span id="bmTotalBatches">0</span> batches | 
-                        📦 Items: <span id="bmItemsProcessed">0</span> | 
-                        ✅ Found: <span id="bmFlipsFound">0</span> |
-                        ⏱️ <span id="bmElapsedTime">0s</span>
-                    </div>
-                </div>
-
-                <!-- Results Container -->
-                <div id="bmResultsContainer"></div>
-
-                <!-- Empty State Message -->
-                <div id="bmEmptyStateMessage" class="empty-state" style="display: none;">
-                    <div class="empty-state-icon">🏪</div>
-                    <div class="empty-state-text"><strong>No profitable flips found</strong></div>
-                    <div class="empty-state-hint">Click "Scan Black Market Flips" to find profit opportunities</div>
-                </div>
-            </div>
-
-            <!-- DATA VALIDATION TAB -->
-            <div class="tab-pane fade" id="validation-pane" role="tabpanel" aria-labelledby="validation-tab">
-                <div class="mt-4">
-                    <h4>📊 Data Validation</h4>
-                    <p class="text-muted">View and verify fetched data stored in local database</p>
-                    
-                    <!-- Database Stats -->
-                    <div id="dbStats" class="filter-section mb-4">
-                        <h5>Local Database Status</h5>
-                        <div id="dbStatsContent">Loading...</div>
-                    </div>
-
-                    <!-- Cached Cities -->
-                    <div class="filter-section mb-4">
-                        <h5>📍 Cached Cities</h5>
-                        <div id="cachedCitiesList"></div>
-                    </div>
-
-                    <!-- City Data Inspector -->
-                    <div class="filter-section mb-4">
-                        <h5>Inspect City Data</h5>
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="inspectCity" class="form-label">Select Location to Inspect:</label>
-                                <select id="inspectCity" class="form-select">
-                                    <option value="">-- Select a location --</option>
-                                    <option value="🏪 Player Markets">--- PLAYER MARKETS ---</option>
-                                    <option value="Fort Sterling">Fort Sterling</option>
-                                    <option value="Lymhurst">Lymhurst</option>
-                                    <option value="Bridgewatch">Bridgewatch</option>
-                                    <option value="Martlock">Martlock</option>
-                                    <option value="Thetford">Thetford</option>
-                                    <option value="Caerleon">Caerleon</option>
-                                    <option value="🏙️ NPC Markets">--- NPC MARKETS ---</option>
-                                    <option value="BlackMarket">🏪 Black Market</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="inspectSearch" class="form-label">Search Items:</label>
-                                <input type="text" id="inspectSearch" class="form-control" placeholder="Search by item name or ID...">
-                            </div>
-                        </div>
-                        <button class="btn btn-info" onclick="inspectCityData()">🔍 Inspect</button>
-                        <button class="btn btn-secondary ms-2" onclick="clearInspectSearch()">Clear Search</button>
-                        <button class="btn btn-warning ms-2" onclick="clearDatabase()">🗑️ Clear All Data</button>
-                        <div id="cityDataInspector" class="mt-3" style="max-height: 600px; overflow-y: auto; border: 1px solid #2d3e50; border-radius: 4px;"></div>
-                    </div>
-
-                    <!-- Material Prices Inspector -->
-                    <div class="filter-section mb-4">
-                        <h5>💎 Material Prices</h5>
-                        <div id="materialPricesInspector"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Loading Indicator -->
-        <div id="loadingIndicator" class="loading">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+              <span class="visually-hidden">Loading...</span>
             </div>
             <p class="mt-3">Fetching data from Albion Online API...</p>
 
             <!-- Progress Bar -->
             <div id="progressContainer" class="progress-container">
-                <div class="row mb-2">
-                    <div class="col-md-8">
-                        <div class="progress" style="height: 25px;">
-                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                                <span id="progressPercent" style="color: white; font-weight: bold;">0%</span>
-                            </div>
-                        </div>
+              <div class="row mb-2">
+                <div class="col-md-8">
+                  <div class="progress" style="height: 25px">
+                    <div
+                      id="progressBar"
+                      class="progress-bar progress-bar-striped progress-bar-animated"
+                      role="progressbar"
+                      style="width: 0%"
+                      aria-valuenow="0"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                    >
+                      <span
+                        id="progressPercent"
+                        style="color: white; font-weight: bold"
+                      >
+                        0%
+                      </span>
                     </div>
-                    <div class="col-md-4">
-                        <div class="progress-stats">
-                            <span id="progressText">Initializing...</span>
-                        </div>
-                    </div>
+                  </div>
                 </div>
-                <div class="progress-stats">
-                    📍 <span id="currentCity">Waiting...</span> | 
-                    📦 Chunk <span id="currentChunk">0</span>/<span id="totalChunks">0</span> |
-                    ⏱️  <span id="elapsedTime">0s</span>
+                <div class="col-md-4">
+                  <div class="progress-stats">
+                    <span id="progressText">Initializing...</span>
+                  </div>
                 </div>
+              </div>
+              <div class="progress-stats">
+                📍
+                <span id="currentCity">Waiting...</span>
+                | 📦 Chunk
+                <span id="currentChunk">0</span>
+                /
+                <span id="totalChunks">0</span>
+                | ⏱️
+                <span id="elapsedTime">0s</span>
+              </div>
             </div>
+          </div>
+
+          <!-- Profit Results Filters -->
+          <div class="filter-section mb-4">
+            <h5 class="mb-3">📊 Filters for Profit Results</h5>
+            <div class="row">
+              <div class="col-md-3">
+                <label for="citySelect" class="form-label">
+                  Filter by City:
+                </label>
+                <select id="citySelect" class="form-select">
+                  <option value="">All Cities</option>
+                  <option value="Fort Sterling">Fort Sterling</option>
+                  <option value="Lymhurst">Lymhurst</option>
+                  <option value="Bridgewatch">Bridgewatch</option>
+                  <option value="Martlock">Martlock</option>
+                  <option value="Thetford">Thetford</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="tierSelect" class="form-label">
+                  Filter by Tier:
+                </label>
+                <select id="tierSelect" class="form-select">
+                  <option value="">All Tiers (4-7)</option>
+                  <option value="4">Tier 4 (Adept)</option>
+                  <option value="5">Tier 5 (Expert)</option>
+                  <option value="6">Tier 6 (Master)</option>
+                  <option value="7">Tier 7 (Grandmaster)</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="categorySelect" class="form-label">
+                  Filter by Category:
+                </label>
+                <select id="categorySelect" class="form-select">
+                  <option value="">All Categories</option>
+                  <option value="weapon">Weapons</option>
+                  <option value="helmet">Helmets</option>
+                  <option value="armor">Armor</option>
+                  <option value="shoes">Shoes</option>
+                  <option value="cape">Capes</option>
+                  <option value="offhand">Off-hands</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="roiFilter" class="form-label">
+                  Minimum ROI (%):
+                </label>
+                <input
+                  type="number"
+                  id="roiFilter"
+                  class="form-control"
+                  value="15"
+                  min="0"
+                  max="100"
+                />
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-3">
+                <label for="statusFilter" class="form-label">
+                  Data Status:
+                </label>
+                <select id="statusFilter" class="form-select">
+                  <option value="all">📊 All Data</option>
+                  <option value="fresh">✅ Fresh Data Only (≤24h)</option>
+                  <option value="old">⚠️ Old Data Only (>24h)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Refresh Info -->
+          <div id="refreshInfo" class="refresh-info" style="display: none">
+            <strong>Current Time:</strong>
+            <span id="currentTimeNow">-</span>
+            <br />
+            <strong>Last Updated:</strong>
+            <span id="lastUpdateTime">Never</span>
+            <span id="minutesAgo" style="color: #aaa"></span>
+          </div>
+
+          <!-- Enhancement Formula Info -->
+          <div class="enhancement-formula">
+            <strong>📊 Enhancement Formula:</strong>
+            <br />
+            Enhancement Cost = Base Item Price + (Material Quantity × Material
+            Price)
+            <br />
+            Revenue = Enhanced Item Sell Price × 0.9 (after 10% tax)
+            <br />
+            Profit = Revenue - Enhancement Cost
+            <br />
+            ROI (%) = (Profit / Enhancement Cost) × 100
+          </div>
+
+          <!-- Results Container -->
+          <div id="resultsContainer"></div>
+
+          <!-- Empty State Message -->
+          <div id="emptyStateMessage" class="empty-state" style="display: none">
+            <div class="empty-state-icon">📊</div>
+            <div class="empty-state-text">
+              <strong>No data loaded yet</strong>
+            </div>
+            <div class="empty-state-hint">
+              Click a city button above to fetch prices from Albion Online
+            </div>
+          </div>
         </div>
 
-        <!-- Error Alert -->
-        <div id="errorAlert" class="alert alert-danger" style="display: none;">
-            <span id="errorMessage"></span>
+        <!-- BLACK MARKET FLIP TAB -->
+        <div
+          class="tab-pane fade"
+          id="blackmarket-pane"
+          role="tabpanel"
+          aria-labelledby="blackmarket-tab"
+        >
+          <div class="tab-guide mt-4">
+            <strong>How To Use This Tab:</strong> Click <code>Scan Black Market Flips</code> to compare Caerleon buy prices vs Black Market instant sell prices. Use tier, enchantment, quality, and ROI filters to shortlist safe flips. Last scan data is cached locally per server.
+          </div>
+          <div class="filter-section mb-4 mt-4">
+            <h5 class="mb-3">🏪 Caerleon ⟷ Black Market Safe Flip</h5>
+            <p class="text-muted">
+              Zero-risk arbitrage: Buy in Caerleon player market → Sell
+              instantly to Black Market NPC. Shows only profitable items.
+            </p>
+
+            <div class="row mb-3">
+              <div class="col-md-3">
+                <label for="bmTierSelect" class="form-label">
+                  Filter by Tier:
+                </label>
+                <select id="bmTierSelect" class="form-select">
+                  <option value="">All Tiers (4-8)</option>
+                  <option value="4">Tier 4 (Adept)</option>
+                  <option value="5">Tier 5 (Expert)</option>
+                  <option value="6">Tier 6 (Master)</option>
+                  <option value="7">Tier 7 (Grandmaster)</option>
+                  <option value="8">Tier 8 (Legendary)</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="bmEnchantmentSelect" class="form-label">
+                  Filter by Enhancement:
+                </label>
+                <select id="bmEnchantmentSelect" class="form-select">
+                  <option value="">All Enhancements (.0 - .4)</option>
+                  <option value="0">.0 (Base)</option>
+                  <option value="1">.1 (Enchanted)</option>
+                  <option value="2">.2 (Rare)</option>
+                  <option value="3">.3 (Exceptional)</option>
+                  <option value="4">.4 (Pristine)</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="bmQualitySelect" class="form-label">
+                  Filter by Quality:
+                </label>
+                <select id="bmQualitySelect" class="form-select">
+                  <option value="">All Qualities (1-5)</option>
+                  <option value="1">Normal (Quality 1)</option>
+                  <option value="2">Good (Quality 2)</option>
+                  <option value="3">Outstanding (Quality 3)</option>
+                  <option value="4">Excellent (Quality 4)</option>
+                  <option value="5">Masterpiece (Quality 5)</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="bmMinRoiFilter" class="form-label">
+                  Minimum ROI (%):
+                </label>
+                <input
+                  type="number"
+                  id="bmMinRoiFilter"
+                  class="form-control"
+                  value="5"
+                  min="0"
+                  max="1000"
+                />
+              </div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-3">
+                <label for="bmMaxResults" class="form-label">
+                  Max Results:
+                </label>
+                <select id="bmMaxResults" class="form-select">
+                  <option value="25">Top 25</option>
+                  <option value="50">Top 50</option>
+                  <option value="100">Top 100</option>
+                  <option value="250">Top 250</option>
+                </select>
+              </div>
+            </div>
+
+            <button id="scanBlackMarketBtn" class="btn btn-warning btn-lg">
+              🔍 Scan Black Market Flips
+            </button>
+            <button id="autoRefreshBMBtn" class="btn btn-info ms-2">
+              🔄 Auto Refresh (30s)
+            </button>
+            <div class="mt-2">
+              <small id="bmLastUpdateInfo" class="text-muted">No Black Market scan cached yet.</small>
+            </div>
+          </div>
+
+          <!-- Black Market Formula Info -->
+          <div class="enhancement-formula">
+            <strong>🏪 Black Market Flip Formula:</strong>
+            <br />
+            Buy Price = Caerleon market sell_price_min
+            <br />
+            Sell Price = Black Market buy_price_max
+            <br />
+            Tax = 8% (4% with Premium)
+            <br />
+            Net Profit = (Sell Price × 0.92) - Buy Price
+            <br />
+            ROI (%) = (Net Profit / Buy Price) × 100
+          </div>
+
+          <!-- Progress Bar for Black Market Scan -->
+          <div
+            id="bmProgressContainer"
+            class="progress-container"
+            style="display: none"
+          >
+            <div class="row mb-2">
+              <div class="col-md-8">
+                <div class="progress" style="height: 25px">
+                  <div
+                    id="bmProgressBar"
+                    class="progress-bar progress-bar-striped progress-bar-animated"
+                    role="progressbar"
+                    style="width: 0%; background-color: #ffc107"
+                    aria-valuenow="0"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    <span
+                      id="bmProgressPercent"
+                      style="color: black; font-weight: bold"
+                    >
+                      0%
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="progress-stats">
+                  <span id="bmProgressText">Initializing...</span>
+                </div>
+              </div>
+            </div>
+            <div class="progress-stats">
+              🔍
+              <span id="bmCurrentBatch">0</span>
+              /
+              <span id="bmTotalBatches">0</span>
+              batches | 📦 Items:
+              <span id="bmItemsProcessed">0</span>
+              | ✅ Found:
+              <span id="bmFlipsFound">0</span>
+              | ⏱️
+              <span id="bmElapsedTime">0s</span>
+            </div>
+          </div>
+
+          <!-- Results Container -->
+          <div id="bmResultsContainer"></div>
+
+          <!-- Empty State Message -->
+          <div
+            id="bmEmptyStateMessage"
+            class="empty-state"
+            style="display: none"
+          >
+            <div class="empty-state-icon">🏪</div>
+            <div class="empty-state-text">
+              <strong>No profitable flips found</strong>
+            </div>
+            <div class="empty-state-hint">
+              Click "Scan Black Market Flips" to find profit opportunities
+            </div>
+          </div>
         </div>
+
+        <!-- CRAFTING PROFIT TAB -->
+        <div
+          class="tab-pane fade"
+          id="crafting-pane"
+          role="tabpanel"
+          aria-labelledby="crafting-tab"
+        >
+          <div class="mt-4">
+            <h4>🔨 Crafting Profit Calculator</h4>
+            <div class="tab-guide">
+              <strong>How To Use This Tab:</strong> Run a crafting scan to calculate material cost + crafting fee against Black Market sell value. Then filter by tier, enhancement, quality, weapon category, search text, and ROI. Profitable rows are cached per server and reload instantly.
+            </div>
+
+            <!-- Filters Section -->
+            <div class="filter-section">
+              <div class="row g-2">
+                <div class="col-md-2">
+                  <label class="form-label">Tier</label>
+                  <select
+                    id="craftTierFilter"
+                    class="form-select"
+                    onchange="displayCraftingProfits()"
+                  >
+                    <option value="">All Tiers</option>
+                    <option value="4">T4</option>
+                    <option value="5">T5</option>
+                    <option value="6">T6</option>
+                    <option value="7">T7</option>
+                    <option value="8">T8</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Enhancement</label>
+                  <select
+                    id="craftEnchantFilter"
+                    class="form-select"
+                    onchange="displayCraftingProfits()"
+                  >
+                    <option value="">All Enchantments</option>
+                    <option value="0">.0</option>
+                    <option value="1">.1</option>
+                    <option value="2">.2</option>
+                    <option value="3">.3</option>
+                    <option value="4">.4</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Quality</label>
+                  <select
+                    id="craftQualityFilter"
+                    class="form-select"
+                    onchange="displayCraftingProfits()"
+                  >
+                    <option value="">All Qualities</option>
+                    <option value="1">Normal</option>
+                    <option value="2">Good</option>
+                    <option value="3">Outstanding</option>
+                    <option value="4">Excellent</option>
+                    <option value="5">Masterpiece</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Weapon Category</label>
+                  <select
+                    id="craftWeaponCategoryFilter"
+                    class="form-select"
+                    onchange="displayCraftingProfits()"
+                  >
+                    <option value="">All</option>
+                    <option value="Bow">Bow</option>
+                    <option value="Crossbow">Crossbow</option>
+                    <option value="Axe">Axe</option>
+                    <option value="Dagger">Dagger</option>
+                    <option value="Hammer">Hammer</option>
+                    <option value="War Gloves">War Gloves</option>
+                    <option value="Mace">Mace</option>
+                    <option value="Quarterstaff">Quarterstaff</option>
+                    <option value="Spear">Spear</option>
+                    <option value="Sword">Sword</option>
+                    <option value="Arcane Staff">Arcane Staff</option>
+                    <option value="Cursed Staff">Cursed Staff</option>
+                    <option value="Fire Staff">Fire Staff</option>
+                    <option value="Frost Staff">Frost Staff</option>
+                    <option value="Holy Staff">Holy Staff</option>
+                    <option value="Nature Staff">Nature Staff</option>
+                    <option value="Shapeshifter Staff">Shapeshifter Staff</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Search</label>
+                  <input
+                    type="text"
+                    id="craftSearchFilter"
+                    class="form-control"
+                    placeholder="item, id, category..."
+                    oninput="displayCraftingProfits()"
+                  />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Min ROI %</label>
+                  <input
+                    type="number"
+                    id="craftMinROI"
+                    class="form-control"
+                    value="0"
+                    min="0"
+                    oninput="displayCraftingProfits()"
+                  />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Max Results</label>
+                  <input
+                    type="number"
+                    id="craftMaxResults"
+                    class="form-control"
+                    value="100"
+                    min="1"
+                    oninput="displayCraftingProfits()"
+                  />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">&nbsp;</label>
+                  <button
+                    class="btn btn-primary w-100"
+                    onclick="fetchCraftingProfits()"
+                  >
+                    🔨 Scan Crafting Profits
+                  </button>
+                </div>
+              </div>
+              <div class="mt-2">
+                <small class="text-muted">
+                  💡 Formula: Net Revenue (BM Price × 0.92) - Total Cost
+                  (Materials + Crafting Fee) = Profit
+                </small>
+              </div>
+              <div class="mt-2">
+                <small id="craftLastUpdateInfo" class="text-muted">No crafting scan cached yet.</small>
+              </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div id="craftProgressContainer" style="display: none">
+              <div class="progress mt-3" style="height: 25px">
+                <div
+                  id="craftProgressBar"
+                  class="progress-bar progress-bar-striped progress-bar-animated"
+                  role="progressbar"
+                  style="width: 0%"
+                >
+                  0%
+                </div>
+              </div>
+              <div id="craftProgressText" class="small text-muted mt-2"></div>
+            </div>
+
+            <!-- Results Container -->
+            <div id="craftResultsContainer" class="mt-3"></div>
+
+            <!-- Empty State -->
+            <div id="craftEmptyState" class="empty-state">
+              <div class="empty-state-icon">🔨</div>
+              <div class="empty-state-text">No crafting data yet</div>
+              <div class="empty-state-hint">
+                Click "Scan Crafting Profits" to find opportunities
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WEAPON PRICES TAB -->
+        <div
+          class="tab-pane fade"
+          id="weapons-pane"
+          role="tabpanel"
+          aria-labelledby="weapons-tab"
+        >
+          <div class="mt-4">
+            <h4>⚔️ Weapon Prices & Recipes</h4>
+            <div class="tab-guide">
+              <strong>How To Use This Tab:</strong> Scan once to build grouped weapon cards with recipe summary and T4.0-T8.4 price matrix. Each cell shows Black Market and city prices; recipe costs are shown as per-city formulas. Cached by server for instant reload.
+            </div>
+
+            <div class="filter-section">
+              <div class="row g-2">
+                <div class="col-md-2">
+                  <label class="form-label">Tier</label>
+                  <select
+                    id="weaponTierFilter"
+                    class="form-select"
+                    onchange="displayWeaponPricesAndRecipes()"
+                  >
+                    <option value="">All Tiers</option>
+                    <option value="4">T4</option>
+                    <option value="5">T5</option>
+                    <option value="6">T6</option>
+                    <option value="7">T7</option>
+                    <option value="8">T8</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Weapon Category</label>
+                  <select
+                    id="weaponCategoryFilter"
+                    class="form-select"
+                    onchange="displayWeaponPricesAndRecipes()"
+                  >
+                    <option value="">All</option>
+                    <option value="Bow">Bow</option>
+                    <option value="Crossbow">Crossbow</option>
+                    <option value="Axe">Axe</option>
+                    <option value="Dagger">Dagger</option>
+                    <option value="Hammer">Hammer</option>
+                    <option value="War Gloves">War Gloves</option>
+                    <option value="Mace">Mace</option>
+                    <option value="Quarterstaff">Quarterstaff</option>
+                    <option value="Spear">Spear</option>
+                    <option value="Sword">Sword</option>
+                    <option value="Arcane Staff">Arcane Staff</option>
+                    <option value="Cursed Staff">Cursed Staff</option>
+                    <option value="Fire Staff">Fire Staff</option>
+                    <option value="Frost Staff">Frost Staff</option>
+                    <option value="Holy Staff">Holy Staff</option>
+                    <option value="Nature Staff">Nature Staff</option>
+                    <option value="Shapeshifter Staff">Shapeshifter Staff</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Search</label>
+                  <input
+                    id="weaponSearchFilter"
+                    class="form-control"
+                    placeholder="sword, axe, crossbow..."
+                    oninput="displayWeaponPricesAndRecipes()"
+                  />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Weapon Groups</label>
+                  <input
+                    id="weaponMaxResults"
+                    type="number"
+                    class="form-control"
+                    value="50"
+                    min="1"
+                    oninput="displayWeaponPricesAndRecipes()"
+                  />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">&nbsp;</label>
+                  <button
+                    class="btn btn-primary w-100"
+                    onclick="fetchWeaponPricesAndRecipes()"
+                  >
+                    ⚔️ Scan Weapon Prices
+                  </button>
+                </div>
+              </div>
+              <div class="mt-2">
+                <small id="weaponLastUpdateInfo" class="text-muted">
+                  No grouped weapon data fetched yet.
+                </small>
+              </div>
+            </div>
+
+            <div id="weaponResultsContainer" class="mt-3"></div>
+            <div id="weaponEmptyState" class="empty-state">
+              <div class="empty-state-icon">⚔️</div>
+              <div class="empty-state-text">No weapon data yet</div>
+              <div class="empty-state-hint">
+                Click "Scan Weapon Prices" to load all weapon prices and recipes
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MATERIAL PRICES TAB -->
+        <div
+          class="tab-pane fade"
+          id="matprice-pane"
+          role="tabpanel"
+          aria-labelledby="matprice-tab"
+        >
+          <div class="mt-4">
+            <h4>💎 Material Prices</h4>
+            <div class="tab-guide">
+              <strong>How To Use This Tab:</strong> Fetch to load refined material prices for all cities and enchant levels. Use it to compare crafting inputs before running crafting/weapon scans. Data is cached locally per server.
+            </div>
+            <div class="d-flex align-items-end gap-3 mb-4 flex-wrap">
+              <div>
+                <button
+                  id="fetchMatPricesBtn"
+                  class="btn btn-primary"
+                  onclick="fetchMatPricesTab()"
+                >
+                  🔄 Fetch Prices
+                </button>
+              </div>
+            </div>
+            <div id="matPricesLastUpdate" class="text-muted small mb-3"></div>
+            <div id="matPricesContainer">
+              <p class="text-muted">Click "Fetch Prices" to load data.</p>
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="tab-pane fade"
+          id="validation-pane"
+          role="tabpanel"
+          aria-labelledby="validation-tab"
+        >
+          <div class="mt-4">
+            <h4>📊 Data Validation</h4>
+            <div class="tab-guide">
+              <strong>How To Use This Tab:</strong> Inspect what is currently stored in local cache for the active server, validate timestamps, search cached rows, and clear cache when you want a clean re-scan.
+            </div>
+
+            <!-- Database Stats -->
+            <div id="dbStats" class="filter-section mb-4">
+              <h5>Local Database Status</h5>
+              <div id="dbStatsContent">Loading...</div>
+            </div>
+
+            <!-- Cached Cities -->
+            <div class="filter-section mb-4">
+              <h5>📍 Cached Cities</h5>
+              <div id="cachedCitiesList"></div>
+            </div>
+
+            <!-- City Data Inspector -->
+            <div class="filter-section mb-4">
+              <h5>Inspect City Data</h5>
+              <div class="row mb-3">
+                <div class="col-md-6">
+                  <label for="inspectCity" class="form-label">
+                    Select Location to Inspect:
+                  </label>
+                  <select id="inspectCity" class="form-select">
+                    <option value="">-- Select a location --</option>
+                    <option value="🏪 Player Markets">
+                      --- PLAYER MARKETS ---
+                    </option>
+                    <option value="Fort Sterling">Fort Sterling</option>
+                    <option value="Lymhurst">Lymhurst</option>
+                    <option value="Bridgewatch">Bridgewatch</option>
+                    <option value="Martlock">Martlock</option>
+                    <option value="Thetford">Thetford</option>
+                    <option value="Caerleon">Caerleon</option>
+                    <option value="🏙️ NPC Markets">--- NPC MARKETS ---</option>
+                    <option value="BlackMarket">🏪 Black Market</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label for="inspectSearch" class="form-label">
+                    Search Items:
+                  </label>
+                  <input
+                    type="text"
+                    id="inspectSearch"
+                    class="form-control"
+                    placeholder="Search by item name or ID..."
+                  />
+                </div>
+              </div>
+              <button class="btn btn-info" onclick="inspectCityData()">
+                🔍 Inspect
+              </button>
+              <button
+                class="btn btn-secondary ms-2"
+                onclick="clearInspectSearch()"
+              >
+                Clear Search
+              </button>
+              <button class="btn btn-warning ms-2" onclick="clearDatabase()">
+                🗑️ Clear All Data
+              </button>
+              <div
+                id="cityDataInspector"
+                class="mt-3"
+                style="
+                  max-height: 600px;
+                  overflow-y: auto;
+                  border: 1px solid #2d3e50;
+                  border-radius: 4px;
+                "
+              ></div>
+            </div>
+
+            <!-- Material Prices Inspector -->
+            <div class="filter-section mb-4">
+              <h5>💎 Material Prices</h5>
+              <div id="materialPricesInspector"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Alert -->
+      <div id="errorAlert" class="alert alert-danger" style="display: none">
+        <span id="errorMessage"></span>
+      </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="database.js?v=20260304-1"></script>
-    <script src="app.js?v=20260304-1"></script>
-</body>
+    <script src="database.js?v=20260311-7"></script>
+    <script src="crafting_recipes.js?v=20260311-7"></script>
+    <script src="app.js?v=20260311-11"></script>
+  </body>
 </html>

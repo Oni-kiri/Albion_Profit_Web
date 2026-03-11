@@ -1,170 +1,134 @@
-# ⚔️ Albion Equipment Enhancement Profit Calculator
+# Albion Market Profit Suite
 
-A web-based calculator for analyzing equipment enhancement profitability in Albion Online. Fetches real-time market prices from the Albion Online Data Project API and automatically calculates ROI for all equipment enhancements.
+A browser-based Albion Online market toolkit for enhancement ROI, Black Market flips, crafting profitability, weapon recipe pricing, and material price comparison.
 
-## 🎯 Purpose
+## What This App Does
 
-Determine which equipment enhancements offer the best profit margins across all Albion royal cities. Instantly identify profitable enhancement opportunities by comparing market prices against material costs.
+- Works with all three Albion data regions:
+  - East (Asia)
+  - West (Americas)
+  - Europe
+- Stores data locally by server selection, so tables can render from cache without refetching every time.
+- Supports dark mode and light mode.
+- Provides tab-specific workflows for different profit strategies.
 
-## ✨ Features
+## Quick Start
 
-### Market Data & Coverage
-- **Real-time Pricing**: Fetches live prices from Albion Online Data Project API
-- **5 Royal Cities**: Fort Sterling, Lymhurst, Bridgewatch, Martlock, Thetford
-- **All 6 Equipment Types**: Weapons, Helmets, Armor, Shoes, Capes, Off-hands
-- **Tiers 4-7**: Comprehensive tier coverage for all item types
-- **Enhancement Levels**: Analyzes enhancements 0→1 (Rune), 1→2 (Soul), 2→3 (Relic)
+1. Open `index.html` in a browser.
+2. In the top-right corner:
+   - Choose a server from `East / West / Europe`.
+   - Choose your preferred mode using the `Light/Dark` toggle.
+3. Use each tab based on your goal.
 
-### Smart Filtering & Display
-- **Per-City Analysis**: Separate refresh buttons for each city (reduces API rate limiting)
-- **ROI Threshold**: Configurable minimum ROI filter (default: 15%)
-- **Data Validation Tab**: Inspect cached prices and verify data quality
-- **Material Price Tracking**: View Rune, Soul, and Relic prices by tier and city
-- **CSV Export**: Download results for spreadsheet analysis
+## How To Use Each Tab
 
-### Local Data Management
-- **Browser Storage**: All fetched data persists in localStorage
-- **Offline Access**: Use cached data without re-fetching
-- **Data Inspector**: Verify cached prices and item counts
-- **Clear Function**: Reset cached data when needed
+### 1) Enhancement Profit
+Purpose: compare enhancement chains (`0 -> 1 -> 2 -> 3`) by city and ROI.
 
-## 🚀 Getting Started
+How to use:
+- Refresh one city at a time with the city buttons.
+- Adjust city/tier/category/ROI/data-status filters.
+- Review top profitable rows with freshness indicators.
 
-### Requirements
-- Modern web browser (Chrome, Firefox, Safari, Edge)
-- Internet connection (for API fetches)
-- No installation needed
+Cached locally:
+- City equipment prices
+- Enhancement material prices (Rune/Soul/Relic)
 
-### Installation
+### 2) Black Market Flip
+Purpose: safe arbitrage from Caerleon player market to Black Market buy orders.
 
-1. Download all repository files
-2. Open `index.html` in your web browser
-3. Click a city button to fetch market data
+How to use:
+- Click `Scan Black Market Flips`.
+- Filter by tier, enchantment, quality, and min ROI.
+- Sort by ROI, profit, or price columns.
 
-## 📖 Usage Guide
+Cached locally:
+- Flip rows
+- Raw Caerleon rows
+- Raw Black Market rows
 
-### Fetching Data
+### 3) Crafting Profit
+Purpose: estimate crafting profit from material costs plus crafting fee against Black Market output value.
 
-1. **Click a City Button** (Profit Results tab)
-   - Fetches independently - no rate-limit issues
-   - Progress bar shows fetch status
-   - Data automatically saves to browser storage
+Important:
+- Artifact prices are included where available, but artifact recipe coverage/quantities are still not perfect for every weapon variant.
+- Because of that, crafting profit rows for artifact weapons can be inaccurate.
 
-2. **View Results**
-   - Items with ROI ≥15% displayed by default
-   - Results sorted by profit (highest first)
-   - Color-coded by data freshness
+How to use:
+- Click `Scan Crafting Profits`.
+- Filter by tier/quality/category/min ROI.
+- Review recipe cost breakdown and profitability.
 
-3. **Inspect Data** (Data Validation tab)
-   - View material prices per city/tier
-   - Check item inventory
-   - Verify storage usage
-   - Export or inspect samples
+Cached locally:
+- Profitable crafting rows
+- Last crafting scan timestamp
 
-### Filtering Results
+### 4) Weapon Prices
+Purpose: grouped weapon price matrix with recipe summary and per-city recipe cost formulas.
 
-- **Tier Select**: Show T4, T5, T6, T7, or all
-- **Category Select**: Filter by equipment type
-- **Min ROI Slider**: Adjust profitability threshold
+How to use:
+- Click `Scan Weapon Prices`.
+- Filter by tier and search by weapon name.
+- Inspect T4.0-T8.4 matrix and city deltas.
 
-### Export Data
+Cached locally:
+- Weapon matrix payload and timestamps
 
-Click **CSV Export** to download results as spreadsheet
+### 5) Material Prices
+Purpose: compare refined material prices by city, tier, and enchantment level.
 
-## 🔧 Technical Details
+How to use:
+- Click `Fetch Prices`.
+- Compare the same material across cities.
+- Use this tab before crafting/weapon scans for cost context.
 
-### Enhancement Cost Formula
-```
-Total Cost = Base Item Price + (Material Quantity × Material Unit Price)
-```
+Cached locally:
+- Material table payload (price map + timestamps)
 
-### ROI Calculation
-```
-Revenue = Enhanced Item Price × 0.9  (10% marketplace tax)
-Net Profit = Revenue - Total Cost
-ROI (%) = (Net Profit / Total Cost) × 100
-```
+### 6) Data Validation
+Purpose: inspect what is currently cached for the active server.
 
-### Material Requirements
+How to use:
+- View storage stats and cached city data.
+- Inspect raw city rows with search.
+- Clear local cache when you want a full clean rescan.
 
-| Enhancement | Material | Weapon | Armor | Helmet | Shoes | Cape | Off-hand |
-|-------------|----------|--------|-------|--------|-------|------|----------|
-| 0→1 | Rune | 384 | 192 | 96 | 96 | 96 | 288 |
-| 1→2 | Soul | 384 | 192 | 96 | 96 | 96 | 288 |
-| 2→3 | Relic | 384 | 192 | 96 | 96 | 96 | 288 |
+## Data Persistence Model
 
-### Data Storage
+All major datasets are saved in browser local storage and scoped by active server.
 
-Market data stored in browser `localStorage`:
-- `albion_equipment_data` - Equipment prices by city
-- `albion_material_prices` - Rune/Soul/Relic prices by city/tier
-- `albion_cities_fetched` - Cached city list
-- `albion_last_update` - Last fetch timestamp
+Examples of cached categories:
+- Enhancement city data
+- Enhancement materials
+- Black Market flip data
+- Crafting profit data
+- Weapon matrix data
+- Material comparison table data
 
-**Note**: Storage is browser-specific and persists until manually cleared.
+When you switch server, the app switches to that server's cache namespace.
 
-## ⚙️ Configuration
+## Tier Color Mapping
 
-Edit `app.js` to customize:
+The UI tier badge colors are:
+- T4: Blue
+- T5: Red
+- T6: Orange
+- T7: Yellow
+- T8: Original app color
 
-```javascript
-const CONFIG = {
-    API_BASE: 'https://east.albion-online-data.com/api/v2/stats/prices',
-    QUALITY_EXCELLENT: 4,
-    MIN_ROI: 15,
-    TAX_RATE: 0.1,
-    CITIES: ['Fort Sterling', 'Lymhurst', 'Bridgewatch', 'Martlock', 'Thetford'],
-    TIERS: [4, 5, 6, 7]
-};
-```
+## Notes
 
-## 🗂️ File Structure
+- Live prices come from the Albion Online Data Project API.
+- Artifact prices are partially supported in crafting calculations; treat artifact-weapon profit estimates as approximate.
+- If a table is empty, run the corresponding scan/fetch once for the active server.
+- Caches are browser-local and not shared across browsers or devices.
 
-```
-├── index.html                  # Main UI
-├── app.js                      # Core logic
-├── database.js                 # LocalStorage module
-├── item_names.json            # Item mappings
-├── all_equipment_items.json   # Equipment database
-├── items.txt                  # Reference data
-├── README.md                  # This file
-└── LICENSE                    # MIT License
-```
+## Project Files
 
-## 🐛 Troubleshooting
-
-### Materials show "No Price"
-- Material data not fetched yet
-- Check console for fetch status logs
-- Click city button to refresh
-
-### Items missing from results
-- Missing material prices (shown as "No Price")
-- ROI below minimum threshold
-- Check Data Validation tab for details
-
-### API Connection Issues
-- Verify internet connection
-- Check browser console (F12) for errors
-- Albion Data Project API may be temporarily offline
-
-### Old prices showing
-- Data cached >24 hours old
-- Click city button to re-fetch
-- Or use "Clear All Data" to start fresh
-
-## 📝 Notes
-
-- Only items with calculated profit are displayed
-- Items requiring unavailable materials are skipped
-- Prices use `sell_price_min` only
-- Data quality timestamp shown for each result
-- CSV export preserves all calculation details
-
-## 📄 License
-
-MIT License - See LICENSE file
-
----
-
-Built with vanilla HTML/CSS/JavaScript. No external dependencies.
+- `index.html`: UI layout, tab structure, styles
+- `app.js`: data fetch logic, calculations, rendering, tab workflows
+- `database.js`: local cache layer with server-scoped storage
+- `crafting_recipes.js`: crafting recipe definitions and mappings
+- `all_equipment_items.json`: equipment id universe
+- `item_names.json`: item id to display name map
+- `items.txt`: reference list of item ids
