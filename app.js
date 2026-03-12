@@ -1,5 +1,5 @@
 // Configuration
-const CONFIG = {
+const DEFAULT_CONFIG = {
   SERVERS: {
     east: {
       label: "East (Asia)",
@@ -20,6 +20,29 @@ const CONFIG = {
   TAX_RATE: 0.1, // 10% tax
   CITIES: ["Fort Sterling", "Lymhurst", "Bridgewatch", "Martlock", "Thetford"],
   TIERS: [4, 5, 6, 7],
+  REFRESH_INTERVALS_MS: {
+    blackMarketAutoRefresh: 30000,
+  },
+};
+
+const EXTERNAL_CONFIG = window.APP_CONFIG || {};
+const CONFIG = {
+  ...DEFAULT_CONFIG,
+  ...EXTERNAL_CONFIG,
+  SERVERS: {
+    ...DEFAULT_CONFIG.SERVERS,
+    ...(EXTERNAL_CONFIG.SERVERS || {}),
+  },
+  CITIES: Array.isArray(EXTERNAL_CONFIG.CITIES)
+    ? EXTERNAL_CONFIG.CITIES
+    : DEFAULT_CONFIG.CITIES,
+  TIERS: Array.isArray(EXTERNAL_CONFIG.TIERS)
+    ? EXTERNAL_CONFIG.TIERS
+    : DEFAULT_CONFIG.TIERS,
+  REFRESH_INTERVALS_MS: {
+    ...DEFAULT_CONFIG.REFRESH_INTERVALS_MS,
+    ...(EXTERNAL_CONFIG.REFRESH_INTERVALS_MS || {}),
+  },
 };
 
 function getApiBase() {
@@ -63,6 +86,80 @@ let calcStats = {};
 
 // Item name mapping
 let itemNameMap = {};
+
+const TIER_NAME_PREFIX = {
+  4: "Adept's",
+  5: "Expert's",
+  6: "Master's",
+  7: "Grandmaster's",
+  8: "Elder's",
+};
+
+const ITEM_ID_TOKEN_LABELS = {
+  MAIN: "",
+  OFF: "Off Hand",
+  HEAD: "Head",
+  ARMOR: "Armor",
+  SHOES: "Shoes",
+  CAPE: "Cape",
+  BAG: "Bag",
+  SHIELD: "Shield",
+  ARTEFACT: "Artifact",
+  AVALON: "Avalonian",
+  HELL: "Hell",
+  KEEPER: "Keeper",
+  MORGANA: "Morgana",
+  UNDEAD: "Undead",
+  ARCANESTAFF: "Arcane Staff",
+  CURSEDSTAFF: "Cursed Staff",
+  FIRESTAFF: "Fire Staff",
+  FROSTSTAFF: "Frost Staff",
+  HOLYSTAFF: "Holy Staff",
+  NATURESTAFF: "Nature Staff",
+  DIVINESTAFF: "Divine Staff",
+  DEMONICSTAFF: "Demonic Staff",
+  WITCHWORKSTAFF: "Witchwork Staff",
+  LIFETOUCHSTAFF: "Lifetouch Staff",
+  LIFECURSESTAFF: "Lifecurse Staff",
+  WILDSTAFF: "Wild Staff",
+  INFERNOSTAFF: "Inferno Staff",
+  ENIGMATICSTAFF: "Enigmatic Staff",
+  BRIMSTONE: "Brimstone",
+  PERMAFROST: "Permafrost",
+  DAWNSONG: "Dawnsong",
+  EVENSONG: "Evensong",
+  REDEMPTION: "Redemption",
+  FALLENSTAFF: "Fallen Staff",
+  BLIGHTSTAFF: "Blight Staff",
+  IRONROOTSTAFF: "Ironroot Staff",
+  GLACIALSTAFF: "Glacial Staff",
+  QUARTERSTAFF: "Quarterstaff",
+  COMBATSTAFF: "Combat Staff",
+  DOUBLEBLADEDSTAFF: "Double Bladed Staff",
+  BLACKMONKSTAFF: "Black Monk Staff",
+  SOULSCYTHE: "Soulscythe",
+  GRAILSEEKER: "Grailseeker",
+  CROSSBOW: "Crossbow",
+  CLAWPAIR: "Claw Pair",
+  KNUCKLES: "War Gloves",
+  SHAPESHIFTER: "Shapeshifter",
+};
+
+const ITEM_ID_SUFFIX_WORDS = [
+  "CROSSBOW",
+  "QUARTERSTAFF",
+  "STAFF",
+  "SWORD",
+  "DAGGER",
+  "HAMMER",
+  "GLOVES",
+  "SPEAR",
+  "MACE",
+  "AXE",
+  "BOW",
+  "PAIR",
+  "ORB",
+];
 
 // Progress tracking
 let progressStartTime = null;
@@ -178,9 +275,10 @@ const MATERIAL_IDS = {
 // Load all equipment items from JSON file
 async function loadEquipmentItems() {
   try {
-    const response = await fetch("all_equipment_items.json");
-    if (!response.ok) throw new Error("Failed to load equipment items");
-    allEquipmentItems = await response.json();
+    allEquipmentItems = await fetchJsonOrThrow("all_equipment_items.json", {
+      label: "Equipment item list",
+      validate: validateArrayPayload,
+    });
     console.log(`Loaded ${allEquipmentItems.length} unique equipment items`);
     return allEquipmentItems;
   } catch (error) {
@@ -193,18 +291,69 @@ async function loadEquipmentItems() {
 // Load item names from JSON file
 async function loadItemNames() {
   try {
-    const response = await fetch("item_names.json");
-    if (!response.ok) throw new Error("Failed to load item names");
-    itemNameMap = await response.json();
+    itemNameMap = await fetchJsonOrThrow("item_names.json", {
+      label: "Item names",
+      validate: validateObjectPayload,
+    });
     console.log(`Loaded ${Object.keys(itemNameMap).length} item name mappings`);
   } catch (error) {
     console.error("Error loading item names:", error);
+    showNotification("Failed to load item names.", "danger");
   }
 }
 
 // Get display name for an item ID
 function getItemName(itemId) {
-  return itemNameMap[itemId] || itemId;
+  return itemNameMap[itemId] || humanizeItemId(itemId);
+}
+
+function humanizeItemId(itemId) {
+  const rawId = String(itemId || "").trim();
+  if (!rawId) return "";
+
+  const noEnchant = rawId.split("@")[0].replace(/_LEVEL\d+$/, "");
+  const tierMatch = /^T(\d)_/.exec(noEnchant);
+  const tierPrefix = tierMatch
+    ? TIER_NAME_PREFIX[parseInt(tierMatch[1], 10)] || `T${tierMatch[1]}`
+    : "";
+  const body = tierMatch ? noEnchant.slice(tierMatch[0].length) : noEnchant;
+
+  const formatted = body
+    .split("_")
+    .filter(Boolean)
+    .filter((token) => token !== "1H" && token !== "2H")
+    .map(formatItemIdToken)
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return `${tierPrefix} ${formatted}`.trim() || rawId;
+}
+
+function formatItemIdToken(token) {
+  if (!token) return "";
+  if (Object.prototype.hasOwnProperty.call(ITEM_ID_TOKEN_LABELS, token)) {
+    return ITEM_ID_TOKEN_LABELS[token];
+  }
+
+  let normalized = token;
+  for (const suffix of ITEM_ID_SUFFIX_WORDS) {
+    if (normalized.endsWith(suffix) && normalized !== suffix) {
+      normalized = `${normalized.slice(0, -suffix.length)} ${suffix}`;
+      break;
+    }
+  }
+
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function looksLikeRawItemId(value) {
+  return typeof value === "string" && /^T\d_/.test(value);
 }
 
 // Extract tier from item ID (e.g., T4_ -> 4)
@@ -228,6 +377,66 @@ function getBaseItemId(itemId) {
 function getNumericValue(value) {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function validateArrayPayload(data, label) {
+  if (!Array.isArray(data)) {
+    throw new Error(`${label} returned an unexpected response.`);
+  }
+  return data;
+}
+
+function validateObjectPayload(data, label) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error(`${label} returned an unexpected response.`);
+  }
+  return data;
+}
+
+function validateMarketRows(data, label) {
+  const rows = validateArrayPayload(data, label);
+  let droppedCount = 0;
+
+  const validRows = rows.filter((row) => {
+    if (!row || typeof row !== "object") {
+      droppedCount += 1;
+      return false;
+    }
+    const itemId = row.item_id || row.ItemId;
+    if (!itemId) {
+      droppedCount += 1;
+      return false;
+    }
+    return true;
+  });
+
+  if (droppedCount > 0) {
+    showNotification(
+      `${label}: skipped ${droppedCount} invalid row${droppedCount === 1 ? "" : "s"}.`,
+      "warning",
+      { delay: 3500 },
+    );
+  }
+
+  return validRows;
+}
+
+async function fetchJsonOrThrow(url, options = {}) {
+  const {
+    label = "Request",
+    validate,
+    responseType = "json",
+  } = options;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`${label} failed with HTTP ${response.status}.`);
+  }
+
+  const data =
+    responseType === "json" ? await response.json() : await response.text();
+
+  return typeof validate === "function" ? validate(data, label) : data;
 }
 
 // Normalize API market row to a consistent schema
@@ -640,17 +849,22 @@ async function fetchPricesForItemsWithProgress(itemIds, city, onChunkComplete) {
       );
 
       const url = `${getApiBase()}/${chunk.join(",")}.json?locations=${city}&qualities=${CONFIG.QUALITY_EXCELLENT}`;
-      const response = await fetch(url);
 
-      if (!response.ok) {
+      let data = [];
+      try {
+        data = await fetchJsonOrThrow(url, {
+          label: `${city} price chunk ${i + 1}`,
+          validate: validateMarketRows,
+        });
+      } catch (error) {
         console.warn(
-          `❌ API returned ${response.status} for ${city} chunk ${i + 1}`,
+          `❌ ${city} chunk ${i + 1} failed:`,
+          error,
         );
         onChunkComplete(i + 1, chunks.length);
         continue;
       }
 
-      const data = await response.json();
       console.log(
         `✅ Got ${data.length} prices from chunk ${i + 1}/${chunks.length}`,
       );
@@ -698,14 +912,10 @@ async function fetchMaterialPrices(city) {
     );
     console.log(`📡 Full URL: ${url}`);
 
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      console.error(`❌ API returned ${response.status} for ${city}`);
-      return;
-    }
-
-    const allMaterials = await response.json();
+    const allMaterials = await fetchJsonOrThrow(url, {
+      label: `${city} enhancement materials`,
+      validate: validateMarketRows,
+    });
     console.log(
       `📥 API Response for ${city} - Got ${allMaterials.length} items:`,
       allMaterials,
@@ -766,6 +976,7 @@ async function fetchMaterialPrices(city) {
     console.log(`📈 Final materialPrices[${city}]:`, materialPrices[city]);
   } catch (error) {
     console.error(`Error fetching material prices for ${city}:`, error);
+    showNotification(`Failed to fetch enhancement materials for ${city}.`, "danger");
   }
 }
 
@@ -1398,12 +1609,61 @@ function showLoading(show) {
 }
 
 // Show error message
+function showNotification(message, variant = "info", options = {}) {
+  const toastContainer = document.getElementById("toastContainer");
+  if (!toastContainer) return;
+
+  const delay = Number.isFinite(options.delay) ? options.delay : 4000;
+  const autoHide = options.autoHide !== false;
+  const toast = document.createElement("div");
+  const variantClassMap = {
+    danger: "text-bg-danger",
+    error: "text-bg-danger",
+    warning: "text-bg-warning",
+    success: "text-bg-success",
+    info: "text-bg-primary",
+  };
+  const variantClass = variantClassMap[variant] || variantClassMap.info;
+
+  toast.className = `toast align-items-center border-0 ${variantClass}`;
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
+  toast.setAttribute("aria-atomic", "true");
+  toast.innerHTML = `
+    <div class="d-flex">
+      <div class="toast-body">${message}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  `;
+
+  toastContainer.appendChild(toast);
+
+  if (window.bootstrap?.Toast) {
+    const instance = new window.bootstrap.Toast(toast, {
+      autohide: autoHide,
+      delay,
+    });
+    toast.addEventListener("hidden.bs.toast", () => toast.remove());
+    instance.show();
+  } else {
+    setTimeout(() => toast.remove(), autoHide ? delay : 8000);
+  }
+}
+
+function hideError() {
+  const errorAlert = document.getElementById("errorAlert");
+  if (errorAlert) {
+    errorAlert.style.display = "none";
+  }
+}
+
 function showError(message) {
   const errorAlert = document.getElementById("errorAlert");
   if (errorAlert) {
     document.getElementById("errorMessage").textContent = message;
     errorAlert.style.display = "block";
   }
+  showNotification(message, "danger");
 }
 
 // Export to CSV
@@ -1565,11 +1825,10 @@ async function fetchBlackMarketPrices() {
         const url = `${getApiBase()}/${itemIds}.json?locations=Caerleon,BlackMarket&qualities=1,2,3,4,5`;
         console.log(`📡 API URL: ${url.substring(0, 100)}...`);
 
-        const response = await fetch(url);
-
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const prices = await response.json();
+        const prices = await fetchJsonOrThrow(url, {
+          label: `Black Market batch ${currentBatchNum}`,
+          validate: validateMarketRows,
+        });
         console.log(
           `✅ Batch ${currentBatchNum}: Received ${prices.length} price entries`,
         );
@@ -1758,6 +2017,7 @@ async function fetchBlackMarketPrices() {
     displayBlackMarketFlips();
   } catch (error) {
     console.error("Error fetching Black Market prices:", error);
+    showNotification(`Black Market scan failed: ${error.message}`, "danger");
     progressContainer.style.display = "none";
     container.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
   }
@@ -1937,6 +2197,13 @@ window.addEventListener("load", async () => {
 
   initializeThemeMode();
 
+  DB.setNotifier(({ level, message }) => {
+    const variant = level === "error" ? "danger" : level || "info";
+    showNotification(message, variant);
+  });
+
+  await DB.initialize();
+
   const initialServer = DB.getActiveServer();
   initializeServerContext(initialServer);
 
@@ -2025,7 +2292,10 @@ window.addEventListener("load", async () => {
         this.classList.remove("btn-info");
         this.classList.add("btn-danger");
         fetchBlackMarketPrices();
-        bmAutoRefreshInterval = setInterval(fetchBlackMarketPrices, 30000);
+        bmAutoRefreshInterval = setInterval(
+          fetchBlackMarketPrices,
+          CONFIG.REFRESH_INTERVALS_MS.blackMarketAutoRefresh,
+        );
       }
     });
 
@@ -2044,6 +2314,20 @@ window.addEventListener("load", async () => {
 
   // Load all cached data for the active server across every tab.
   loadCachedStateForActiveServer();
+
+  const stats = DB.getStats();
+  showNotification(
+    `Cache ready using ${stats.storageEngine}.`,
+    "success",
+    { delay: 2500 },
+  );
+  if (stats.staleDatasetCount > 0) {
+    showNotification(
+      `Some cached data is stale: ${stats.staleDatasets.join(", ")}.`,
+      "warning",
+      { delay: 4500 },
+    );
+  }
 
   updateCurrentTimeNow();
 
@@ -2307,8 +2591,12 @@ function renderCityData(city) {
 // Update database stats display
 function updateDbStats() {
   const stats = DB.getStats();
+  const staleSummary = stats.staleDatasetCount
+    ? `Stale datasets: ${stats.staleDatasets.join(", ")}`
+    : "All tracked caches are within freshness policy.";
   const statsHtml = `
     <div class="mb-2"><strong>Active Server:</strong> ${getActiveServerLabel()} (${stats.activeServer})</div>
+    <div class="mb-2"><strong>Storage Engine:</strong> ${stats.storageEngine}</div>
         <div class="row">
       <div class="col-md-2">
                 <div class="stats-box">
@@ -2349,6 +2637,9 @@ function updateDbStats() {
         </div>
     <div class="small text-muted mt-2">
       Weapon rows: ${stats.weaponRowsCached.toLocaleString()} | Material table cache: ${stats.hasMaterialTableCache ? "Yes" : "No"}
+    </div>
+    <div class="small text-muted mt-1">
+      ${staleSummary}
     </div>
     `;
   const dbStatsContainer = document.getElementById("dbStatsContent");
@@ -2613,7 +2904,8 @@ function clearDatabase() {
   document.getElementById("cityDataInspector").innerHTML = "";
 
   console.log("✅ Database cleared");
-  alert("✅ All local data has been cleared");
+  hideError();
+  showNotification("All local cached data has been cleared.", "success");
 }
 
 // ============================================
@@ -2624,6 +2916,8 @@ let craftingProfitData = []; // Store profitable crafts
 let materialPricesData = {}; // Store material prices from Caerleon
 let craftSortColumn = "roi"; // Default sort: roi, profit, cost, revenue
 let craftSortDirection = "desc";
+const selectedCraftingRows = new Set();
+let showSelectedCraftOnly = false;
 let weaponPriceData = []; // Store weapon rows by tier, enchantment, and market quality
 let weaponSortColumn = "tier";
 let weaponSortDirection = "asc";
@@ -2641,13 +2935,18 @@ function initCraftingTab() {
   const payload = DB.getCraftingProfits();
   if (!payload || !Array.isArray(payload.rows)) {
     craftingProfitData = [];
+    selectedCraftingRows.clear();
+    showSelectedCraftOnly = false;
     displayCraftingProfits();
     const info = document.getElementById("craftLastUpdateInfo");
     if (info) info.textContent = "No crafting scan cached yet.";
     return;
   }
 
-  craftingProfitData = payload.rows;
+  craftingProfitData = payload.rows.map((row) => ({
+    ...row,
+    itemName: getCraftingDisplayName(row),
+  }));
 
   const materialBuySelect = document.getElementById("craftMaterialBuyCity");
   if (materialBuySelect && payload.materialBuyCity) {
@@ -2786,6 +3085,180 @@ function sortCraftingData(column) {
   displayCraftingProfits();
 }
 
+function getCraftEnchantment(item) {
+  const directEnchant = Number(item.enchantment);
+  if (Number.isFinite(directEnchant) && directEnchant >= 0) {
+    return Math.floor(directEnchant);
+  }
+  const itemIdEnchant = /@(\d+)$/.exec(item.itemId || item.baseItemId || "");
+  if (itemIdEnchant) return parseInt(itemIdEnchant[1], 10) || 0;
+  return 0;
+}
+
+function getCraftQuality(item) {
+  const marketQuality = Number(item.marketQuality);
+  if (Number.isFinite(marketQuality) && marketQuality >= 1 && marketQuality <= 5) {
+    return Math.floor(marketQuality);
+  }
+  const legacyQuality = Number(item.quality);
+  if (Number.isFinite(legacyQuality) && legacyQuality >= 1 && legacyQuality <= 5) {
+    return legacyQuality;
+  }
+  return 1;
+}
+
+function getCraftingDisplayName(item) {
+  const sourceId = item.baseItemId || item.itemId || item.itemName || "";
+  if (item.itemName && !looksLikeRawItemId(item.itemName)) {
+    return item.itemName;
+  }
+  return getItemName(sourceId);
+}
+
+function getCraftingRowKey(item) {
+  return [
+    item.baseItemId || item.itemId || item.itemName || "",
+    getCraftEnchantment(item),
+    getCraftQuality(item),
+    item.materialBuyCity || "Caerleon",
+    item.sellCity || "Black Market",
+  ].join("|");
+}
+
+function setCraftingRowSelected(rowKey, isSelected) {
+  if (isSelected) {
+    selectedCraftingRows.add(rowKey);
+  } else {
+    selectedCraftingRows.delete(rowKey);
+  }
+  displayCraftingProfits();
+}
+
+function clearSelectedCraftingRows() {
+  selectedCraftingRows.clear();
+  showSelectedCraftOnly = false;
+  displayCraftingProfits();
+}
+
+function setShowSelectedCraftOnly(enabled) {
+  showSelectedCraftOnly = Boolean(enabled);
+  displayCraftingProfits();
+}
+
+function getCraftingTableState() {
+  const tierFilters = getSelectedFilterValues("craftTierFilter");
+  const enchantFilters = getSelectedFilterValues("craftEnchantFilter")
+    .map((value) => parseInt(value, 10))
+    .filter(Number.isFinite);
+  const qualityFilters = getSelectedFilterValues("craftQualityFilter")
+    .map((value) => parseInt(value, 10))
+    .filter(Number.isFinite);
+  const weaponCategoryFilters = getSelectedFilterValues(
+    "craftWeaponCategoryFilter",
+  );
+  const searchFilter =
+    (document.getElementById("craftSearchFilter")?.value || "")
+      .toLowerCase()
+      .trim();
+  const minRoi = parseFloat(document.getElementById("craftMinROI")?.value || 0);
+  const maxResults = parseInt(
+    document.getElementById("craftMaxResults")?.value || 100,
+    10,
+  );
+
+  let filtered = craftingProfitData.filter((item) => {
+    const enchantment = getCraftEnchantment(item);
+    const marketQuality = getCraftQuality(item);
+    const itemId = item.baseItemId || item.itemId || "";
+    const itemWeaponCategory =
+      item.weaponCategory ||
+      (getCategoryFromItemId(itemId) === "weapon"
+        ? getWeaponSearchCategory(itemId)
+        : "");
+    const displayName = getCraftingDisplayName(item);
+
+    if (item.roi < minRoi) return false;
+    if (tierFilters.length && !tierFilters.includes(String(item.tier))) return false;
+    if (enchantFilters.length && !enchantFilters.includes(enchantment)) return false;
+    if (qualityFilters.length && !qualityFilters.includes(marketQuality)) return false;
+    if (
+      weaponCategoryFilters.length &&
+      !weaponCategoryFilters.includes(itemWeaponCategory)
+    ) {
+      return false;
+    }
+    if (showSelectedCraftOnly && !selectedCraftingRows.has(getCraftingRowKey(item))) {
+      return false;
+    }
+    if (searchFilter) {
+      const text = `${displayName} ${item.itemId || ""} ${item.baseItemId || ""} ${item.category || ""} ${itemWeaponCategory}`
+        .toLowerCase()
+        .trim();
+      if (!text.includes(searchFilter)) return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    let aVal;
+    let bVal;
+
+    switch (craftSortColumn) {
+      case "itemName":
+        aVal = getCraftingDisplayName(a).toLowerCase();
+        bVal = getCraftingDisplayName(b).toLowerCase();
+        break;
+      case "tier":
+        aVal = parseInt(a.tier, 10);
+        bVal = parseInt(b.tier, 10);
+        break;
+      case "cost":
+        aVal = a.totalCost;
+        bVal = b.totalCost;
+        break;
+      case "revenue":
+        aVal = a.netRevenue;
+        bVal = b.netRevenue;
+        break;
+      case "profit":
+        aVal = a.profit;
+        bVal = b.profit;
+        break;
+      case "roi":
+      default:
+        aVal = a.roi;
+        bVal = b.roi;
+        break;
+    }
+
+    if (typeof aVal === "string") {
+      return craftSortDirection === "asc"
+        ? aVal.localeCompare(bVal)
+        : bVal.localeCompare(aVal);
+    }
+    return craftSortDirection === "asc" ? aVal - bVal : bVal - aVal;
+  });
+
+  return {
+    rows: filtered.slice(0, maxResults),
+    totalMatching: filtered.length,
+    minRoi,
+  };
+}
+
+function toggleSelectAllCraftingRows(isSelected) {
+  const { rows } = getCraftingTableState();
+  rows.forEach((item) => {
+    const rowKey = getCraftingRowKey(item);
+    if (isSelected) {
+      selectedCraftingRows.add(rowKey);
+    } else {
+      selectedCraftingRows.delete(rowKey);
+    }
+  });
+  displayCraftingProfits();
+}
+
 async function fetchCraftingProfits() {
   const container = document.getElementById("craftResultsContainer");
   const progressContainer = document.getElementById("craftProgressContainer");
@@ -2889,8 +3362,10 @@ async function fetchCraftingProfits() {
     console.log(`📦 Fetching ${materialIds.length} material prices...`);
 
     const matPricesUrl = `${getApiBase()}/${materialIds.join(",")}.json?locations=${encodeURIComponent(materialBuyCity)}&qualities=1`;
-    const matResponse = await fetch(matPricesUrl);
-    const matPrices = await matResponse.json();
+    const matPrices = await fetchJsonOrThrow(matPricesUrl, {
+      label: `${materialBuyCity} crafting materials`,
+      validate: validateMarketRows,
+    });
 
     // Store material prices
     materialPricesData = {};
@@ -2918,11 +3393,10 @@ async function fetchCraftingProfits() {
       for (let i = 0; i < artifactIds.length; i += artifactBatchSize) {
         const batch = artifactIds.slice(i, i + artifactBatchSize);
         const artifactUrl = `${getApiBase()}/${batch.join(",")}.json?locations=${encodeURIComponent(materialBuyCity)}&qualities=1`;
-        const artifactResponse = await fetch(artifactUrl);
-        if (!artifactResponse.ok) {
-          throw new Error(`Artifact API error ${artifactResponse.status}`);
-        }
-        const artifactRows = await artifactResponse.json();
+        const artifactRows = await fetchJsonOrThrow(artifactUrl, {
+          label: `${materialBuyCity} artifact prices`,
+          validate: validateMarketRows,
+        });
         artifactRows.forEach((row) => {
           if (row.city !== materialBuyCity) return;
           const price = getNumericValue(row.sell_price_min);
@@ -2961,8 +3435,10 @@ async function fetchCraftingProfits() {
       );
 
       const itemPricesUrl = `${getApiBase()}/${batch.join(",")}.json?locations=${encodeURIComponent(sellCityApi)}&qualities=1,2,3,4,5`;
-      const itemResponse = await fetch(itemPricesUrl);
-      const itemPrices = await itemResponse.json();
+      const itemPrices = await fetchJsonOrThrow(itemPricesUrl, {
+        label: `${sellCityDisplay} crafting output batch ${batchNum}`,
+        validate: validateMarketRows,
+      });
 
       // Calculate profits for this batch
       itemPrices.forEach((item) => {
@@ -3080,6 +3556,8 @@ async function fetchCraftingProfits() {
     console.log(`✅ Found ${craftProfits.length} profitable crafts`);
 
     craftingProfitData = craftProfits;
+    selectedCraftingRows.clear();
+    showSelectedCraftOnly = false;
     const scanTimestamp = new Date().toLocaleString();
     DB.saveCraftingProfits({
       timestamp: scanTimestamp,
@@ -3099,6 +3577,7 @@ async function fetchCraftingProfits() {
     displayCraftingProfits();
   } catch (error) {
     console.error("❌ Error fetching crafting profits:", error);
+    showNotification(`Crafting scan failed: ${error.message}`, "danger");
     progressContainer.style.display = "none";
     container.innerHTML =
       '<div class="alert alert-danger">Failed to fetch crafting data. Check console for details.</div>';
@@ -3108,26 +3587,6 @@ async function fetchCraftingProfits() {
 function displayCraftingProfits() {
   const container = document.getElementById("craftResultsContainer");
   const emptyState = document.getElementById("craftEmptyState");
-  const getCraftEnchantment = (item) => {
-    const directEnchant = Number(item.enchantment);
-    if (Number.isFinite(directEnchant) && directEnchant >= 0) {
-      return Math.floor(directEnchant);
-    }
-    const itemIdEnchant = /@(\d+)$/.exec(item.itemId || item.baseItemId || "");
-    if (itemIdEnchant) return parseInt(itemIdEnchant[1], 10) || 0;
-    return 0;
-  };
-  const getCraftQuality = (item) => {
-    const marketQuality = Number(item.marketQuality);
-    if (Number.isFinite(marketQuality) && marketQuality >= 1 && marketQuality <= 5) {
-      return Math.floor(marketQuality);
-    }
-    const legacyQuality = Number(item.quality);
-    if (Number.isFinite(legacyQuality) && legacyQuality >= 1 && legacyQuality <= 5) {
-      return legacyQuality;
-    }
-    return 1;
-  };
 
   if (!container) return;
 
@@ -3138,100 +3597,14 @@ function displayCraftingProfits() {
   }
 
   if (emptyState) emptyState.style.display = "none";
-
-  // Get filters
-  const tierFilters = getSelectedFilterValues("craftTierFilter");
-  const enchantFilters = getSelectedFilterValues("craftEnchantFilter")
-    .map((value) => parseInt(value, 10))
-    .filter(Number.isFinite);
-  const qualityFilters = getSelectedFilterValues("craftQualityFilter")
-    .map((value) => parseInt(value, 10))
-    .filter(Number.isFinite);
-  const weaponCategoryFilters = getSelectedFilterValues(
-    "craftWeaponCategoryFilter",
-  );
-  const searchFilter =
-    (document.getElementById("craftSearchFilter")?.value || "")
-      .toLowerCase()
-      .trim();
-  const minRoi = parseFloat(document.getElementById("craftMinROI")?.value || 0);
-  const maxResults = parseInt(
-    document.getElementById("craftMaxResults")?.value || 100,
-  );
-
-  // Apply filters
-  let filtered = craftingProfitData.filter((item) => {
-    const enchantment = getCraftEnchantment(item);
-    const marketQuality = getCraftQuality(item);
-    const itemId = item.baseItemId || item.itemId || "";
-    const itemWeaponCategory =
-      item.weaponCategory ||
-      (getCategoryFromItemId(itemId) === "weapon"
-        ? getWeaponSearchCategory(itemId)
-        : "");
-    if (item.roi < minRoi) return false;
-    if (tierFilters.length && !tierFilters.includes(item.tier.toString()))
-      return false;
-    if (enchantFilters.length && !enchantFilters.includes(enchantment))
-      return false;
-    if (qualityFilters.length && !qualityFilters.includes(marketQuality))
-      return false;
-    if (
-      weaponCategoryFilters.length &&
-      !weaponCategoryFilters.includes(itemWeaponCategory)
-    )
-      return false;
-    if (searchFilter) {
-      const text = `${item.itemName || ""} ${item.itemId || ""} ${item.baseItemId || ""} ${item.category || ""} ${itemWeaponCategory}`
-        .toLowerCase()
-        .trim();
-      if (!text.includes(searchFilter)) return false;
-    }
-    return true;
-  });
-
-  // Apply sorting
-  filtered.sort((a, b) => {
-    let aVal, bVal;
-
-    switch (craftSortColumn) {
-      case "itemName":
-        aVal = a.itemName.toLowerCase();
-        bVal = b.itemName.toLowerCase();
-        break;
-      case "tier":
-        aVal = parseInt(a.tier);
-        bVal = parseInt(b.tier);
-        break;
-      case "cost":
-        aVal = a.totalCost;
-        bVal = b.totalCost;
-        break;
-      case "revenue":
-        aVal = a.netRevenue;
-        bVal = b.netRevenue;
-        break;
-      case "profit":
-        aVal = a.profit;
-        bVal = b.profit;
-        break;
-      case "roi":
-      default:
-        aVal = a.roi;
-        bVal = b.roi;
-        break;
-    }
-
-    if (typeof aVal === "string") {
-      return craftSortDirection === "asc"
-        ? aVal.localeCompare(bVal)
-        : bVal.localeCompare(aVal);
-    } else {
-      return craftSortDirection === "asc" ? aVal - bVal : bVal - aVal;
-    }
-  });
-
-  filtered = filtered.slice(0, maxResults);
+  const { rows: filtered, totalMatching, minRoi } = getCraftingTableState();
+  const selectedVisibleCount = filtered.filter((item) =>
+    selectedCraftingRows.has(getCraftingRowKey(item)),
+  ).length;
+  const selectedCount = craftingProfitData.filter((item) =>
+    selectedCraftingRows.has(getCraftingRowKey(item)),
+  ).length;
+  const allVisibleSelected = filtered.length > 0 && selectedVisibleCount === filtered.length;
 
   // Build table
   const getSortIcon = (column) => {
@@ -3244,6 +3617,7 @@ function displayCraftingProfits() {
   let html =
     '<div class="table-responsive mt-4"><table class="table table-dark table-hover">';
   html += '<thead><tr style="background-color: #2a5298;">';
+  html += `<th><input type="checkbox" class="form-check-input crafting-row-checkbox" ${allVisibleSelected ? "checked" : ""} onchange="toggleSelectAllCraftingRows(this.checked)" title="Select all visible rows"></th>`;
   html += `<th class="sortable" onclick="sortCraftingData('itemName')">Item Name ${getSortIcon("itemName")}</th>`;
   html += `<th class="sortable" onclick="sortCraftingData('tier')">Tier ${getSortIcon("tier")}</th>`;
   html += "<th>Enhancement</th>";
@@ -3265,9 +3639,25 @@ function displayCraftingProfits() {
     "Masterpiece",
   ];
 
+  html = `
+    <div class="crafting-selection-bar mt-3">
+      <div class="crafting-selection-meta">Selected: ${selectedCount} row(s)</div>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <label class="form-check m-0">
+          <input type="checkbox" class="form-check-input crafting-row-checkbox" ${showSelectedCraftOnly ? "checked" : ""} onchange="setShowSelectedCraftOnly(this.checked)">
+          <span class="form-check-label ms-2">Show selected only</span>
+        </label>
+        <button type="button" class="btn btn-sm btn-outline-light" onclick="clearSelectedCraftingRows()">Clear selected</button>
+      </div>
+    </div>
+  ` + html;
+
   filtered.forEach((item) => {
     const enchantment = getCraftEnchantment(item);
     const marketQuality = getCraftQuality(item);
+    const displayName = getCraftingDisplayName(item);
+    const rowKey = getCraftingRowKey(item);
+    const isSelected = selectedCraftingRows.has(rowKey);
     const tierBadgeClass = `tier-${item.tier}`;
     const tierDisplay = `T${item.tier}`;
     const sellCity = item.sellCity || "Black Market";
@@ -3325,8 +3715,9 @@ function displayCraftingProfits() {
       });
     }
 
-    html += `<tr class="profitable">
-          <td><strong>${item.itemName}</strong><br><small class="text-muted">${item.category} • ${materialBuyCity} → ${sellCity}</small></td>
+        html += `<tr class="profitable${isSelected ? " crafting-row-selected" : ""}">
+          <td><input type="checkbox" class="form-check-input crafting-row-checkbox" ${isSelected ? "checked" : ""} onchange="setCraftingRowSelected('${rowKey}', this.checked)" title="Select this row"></td>
+          <td><strong>${displayName}</strong><br><small class="text-muted">${item.category} • ${materialBuyCity} → ${sellCity}</small></td>
             <td><span class="tier-badge ${tierBadgeClass}">${tierDisplay}</span></td>
             <td><span class="badge bg-secondary">.${enchantment}</span></td>
             <td><span class="badge bg-info">${qualityNames[marketQuality]} (Q${marketQuality})</span></td>
@@ -3340,7 +3731,7 @@ function displayCraftingProfits() {
   });
 
   html += "</tbody></table></div>";
-  html += `<div class="alert alert-info mt-3">🔨 Showing ${filtered.length} of ${craftingProfitData.length} total profitable crafts | Min ROI: ${minRoi}%</div>`;
+  html += `<div class="alert alert-info mt-3">🔨 Showing ${filtered.length} of ${totalMatching} matching crafts (${craftingProfitData.length} total cached) | Min ROI: ${minRoi}%</div>`;
 
   container.innerHTML = html;
 }
@@ -4177,10 +4568,10 @@ async function fetchWeaponPricesAndRecipes() {
       for (let i = 0; i < materialIds.length; i += batchSize) {
         const batch = materialIds.slice(i, i + batchSize);
         const matPricesUrl = `${getApiBase()}/${batch.join(",")}.json?locations=${encodedMaterialCities}&qualities=1`;
-        const matResponse = await fetch(matPricesUrl);
-        if (!matResponse.ok)
-          throw new Error(`Material API error ${matResponse.status}`);
-        const matPrices = await matResponse.json();
+        const matPrices = await fetchJsonOrThrow(matPricesUrl, {
+          label: "Weapon material prices",
+          validate: validateMarketRows,
+        });
         matPrices.forEach((mat) => {
           if (!WEAPON_RECIPE_COST_CITIES.includes(mat.city)) return;
 
@@ -4210,10 +4601,10 @@ async function fetchWeaponPricesAndRecipes() {
       for (let i = 0; i < artifactIds.length; i += batchSize) {
         const batch = artifactIds.slice(i, i + batchSize);
         const artifactUrl = `${getApiBase()}/${batch.join(",")}.json?locations=${encodedArtifactCities}&qualities=1`;
-        const artifactResponse = await fetch(artifactUrl);
-        if (!artifactResponse.ok)
-          throw new Error(`Artifact API error ${artifactResponse.status}`);
-        const artifactRows = await artifactResponse.json();
+        const artifactRows = await fetchJsonOrThrow(artifactUrl, {
+          label: "Weapon artifact prices",
+          validate: validateMarketRows,
+        });
         artifactRows.forEach((row) => {
           if (!WEAPON_RECIPE_COST_CITIES.includes(row.city)) return;
 
@@ -4241,11 +4632,10 @@ async function fetchWeaponPricesAndRecipes() {
       for (let i = 0; i < finishedItemIds.length; i += batchSize) {
         const batch = finishedItemIds.slice(i, i + batchSize);
         const cityUrl = `${getApiBase()}/${batch.join(",")}.json?locations=${encodedCities}&qualities=1,2,3,4,5`;
-        const cityResponse = await fetch(cityUrl);
-        if (!cityResponse.ok)
-          throw new Error(`City price API error ${cityResponse.status}`);
-
-        const cityRows = await cityResponse.json();
+        const cityRows = await fetchJsonOrThrow(cityUrl, {
+          label: "Weapon city prices",
+          validate: validateMarketRows,
+        });
         cityRows.forEach((row) => {
           const sellPrice = getNumericValue(row.sell_price_min);
           if (sellPrice <= 0) return;
@@ -4381,11 +4771,10 @@ async function fetchWeaponPricesAndRecipes() {
     for (let i = 0; i < finishedItemIds.length; i += batchSize) {
       const batch = finishedItemIds.slice(i, i + batchSize);
       const url = `${getApiBase()}/${batch.join(",")}.json?locations=BlackMarket&qualities=1,2,3,4,5`;
-      const response = await fetch(url);
-      if (!response.ok)
-        throw new Error(`Black Market API error ${response.status}`);
-
-      const itemPrices = await response.json();
+      const itemPrices = await fetchJsonOrThrow(url, {
+        label: "Weapon Black Market prices",
+        validate: validateMarketRows,
+      });
       itemPrices.forEach((item) => {
         if (item.city !== "Black Market") return;
         const itemQuality = parseInt(item.quality || item.Quality || "1", 10);
@@ -4405,6 +4794,7 @@ async function fetchWeaponPricesAndRecipes() {
     displayWeaponPricesAndRecipes();
   } catch (error) {
     console.error("Error fetching weapon prices:", error);
+    showNotification(`Failed to fetch weapon data: ${error.message}`, "danger");
     container.innerHTML = `<div class="alert alert-danger">Failed to fetch weapon data: ${error.message}</div>`;
   }
 }
@@ -4645,9 +5035,10 @@ async function fetchMatPricesTab() {
     for (let i = 0; i < itemIds.length; i += batchSize) {
       const batch = itemIds.slice(i, i + batchSize);
       const url = `${getApiBase()}/${batch.join(",")}.json?locations=${cities.join(",")}&qualities=1`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`API error ${response.status}`);
-      const data = await response.json();
+      const data = await fetchJsonOrThrow(url, {
+        label: "Material table batch",
+        validate: validateMarketRows,
+      });
       data.forEach((entry) => {
         const id = entry.item_id || entry.ItemId;
         const city = entry.city;
@@ -4681,6 +5072,7 @@ async function fetchMatPricesTab() {
       timestamp: now,
     });
   } catch (err) {
+    showNotification(`Failed to fetch material table prices: ${err.message}`, "danger");
     container.innerHTML = `<div class="alert alert-danger">Failed to fetch prices: ${err.message}</div>`;
   } finally {
     btn.disabled = false;

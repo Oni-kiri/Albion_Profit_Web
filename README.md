@@ -106,7 +106,12 @@ How to use:
 
 ## Data Persistence Model
 
-All major datasets are saved in browser local storage and scoped by active server.
+All major datasets are saved in browser cache and scoped by active server.
+
+Current strategy:
+- IndexedDB is the primary cache store for larger datasets.
+- localStorage is kept only as a fallback for browsers/environments where IndexedDB is unavailable.
+- Cache entries include freshness metadata so stale datasets can be detected without forcing unnecessary refetches.
 
 Examples of cached categories:
 - Enhancement city data
@@ -133,13 +138,20 @@ The UI tier badge colors are:
 - Artifact prices are partially supported in crafting calculations; treat artifact-weapon profit estimates as approximate.
 - If a table is empty, run the corresponding scan/fetch once for the active server.
 - Caches are browser-local and not shared across browsers or devices.
+- The app will warn when cached datasets are stale based on dataset-specific TTL policies.
 
 ## Project Files
 
 - `index.html`: UI layout, tab structure, styles
+- `config.js`: runtime configuration for API endpoints, servers, and refresh intervals
 - `app.js`: data fetch logic, calculations, rendering, tab workflows
-- `database.js`: local cache layer with server-scoped storage
+- `database.js`: IndexedDB-backed cache layer with server-scoped storage and fallback support
 - `crafting_recipes.js`: crafting recipe definitions and mappings
 - `all_equipment_items.json`: equipment id universe
 - `item_names.json`: item id to display name map
 - `items.txt`: reference list of item ids
+
+## Developer Planning
+
+- See `DEVELOPER_ROADMAP.md` for the staged to-do list covering storage, modularization, testing, validation, accessibility, and deployment improvements.
+- See `INTERNAL_DOC.md` for the internal engineering reference covering stack, file structure, runtime flow, cache behavior, and maintenance notes.

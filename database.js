@@ -1,5 +1,5 @@
 // Local Database Module for Albion Profit Calculator
-// Stores fetched market data locally for reuse across tabs and servers.
+// Uses IndexedDB for main persistence with a localStorage fallback.
 
 const DB = {
   KEYS: {
@@ -14,6 +14,46 @@ const DB = {
   },
 
   DEFAULT_SERVER: "east",
+  IDB_NAME: "albion-profit-suite",
+  IDB_VERSION: 1,
+  IDB_STORE: "cache_entries",
+  CACHE_POLICY: {
+    albion_equipment_data: { ttlMs: 6 * 60 * 60 * 1000, label: "Equipment" },
+    albion_material_prices: {
+      ttlMs: 6 * 60 * 60 * 1000,
+      label: "Enhancement Materials",
+    },
+    albion_weapon_prices: { ttlMs: 30 * 60 * 1000, label: "Weapon Prices" },
+    albion_blackmarket_flips: {
+      ttlMs: 15 * 60 * 1000,
+      label: "Black Market",
+    },
+    albion_crafting_profits: {
+      ttlMs: 15 * 60 * 1000,
+      label: "Crafting Profit",
+    },
+    albion_material_table: { ttlMs: 30 * 60 * 1000, label: "Material Table" },
+    albion_cities_fetched: { ttlMs: 6 * 60 * 60 * 1000, label: "Cities" },
+  },
+
+  memoryCache: new Map(),
+  idb: null,
+  initialized: false,
+  storageEngine: "localStorage",
+  notifier: null,
+
+  setNotifier(notifier) {
+    this.notifier = typeof notifier === "function" ? notifier : null;
+  },
+
+  notify(level, message, detail) {
+    if (!this.notifier) return;
+    try {
+      this.notifier({ level, message, detail });
+    } catch {
+      // Ignore notifier failures.
+    }
+  },
 
   setActiveServer(serverId) {
     try {
@@ -25,6 +65,7 @@ const DB = {
       return true;
     } catch (error) {
       console.error("❌ Error saving active server:", error);
+      this.notify("error", "Failed to save active server.", error.message);
       return false;
     }
   },
@@ -43,29 +84,309 @@ const DB = {
     return `${baseKey}__${this.getActiveServer()}`;
   },
 
-  readJSON(storageKey, fallbackValue) {
+  getPolicy(baseKey) {
+    return this.CACHE_POLICY[baseKey] || { ttlMs: null, label: baseKey };
+  },
+
+  getBaseKeyFromStorageKey(storageKey) {
+    return String(storageKey || "").split("__")[0];
+  },
+
+  isWrappedRecord(value) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      Object.prototype.hasOwnProperty.call(value, "key") &&
+      Object.prototype.hasOwnProperty.call(value, "value")
+    );
+  },
+
+  createRecord(baseKey, storageKey, value, updatedAt, expiresAt) {
+    const now = Date.now();
+    const policy = this.getPolicy(baseKey);
+    return {
+      key: storageKey,
+      baseKey,
+      value,
+      updatedAt: Number.isFinite(updatedAt) ? updatedAt : now,
+      expiresAt:
+        expiresAt === null || Number.isFinite(expiresAt)
+          ? expiresAt
+          : policy.ttlMs
+            ? now + policy.ttlMs
+            : null,
+    };
+  },
+
+  normalizeRecord(storageKey, rawValue) {
+    if (rawValue === null || rawValue === undefined) return null;
+
+    if (this.isWrappedRecord(rawValue)) {
+      return this.createRecord(
+        rawValue.baseKey || this.getBaseKeyFromStorageKey(rawValue.key || storageKey),
+        rawValue.key || storageKey,
+        rawValue.value,
+        rawValue.updatedAt,
+        rawValue.expiresAt,
+      );
+    }
+
+    return this.createRecord(
+      this.getBaseKeyFromStorageKey(storageKey),
+      storageKey,
+      rawValue,
+      null,
+      null,
+    );
+  },
+
+  readLocalRecord(storageKey) {
     try {
-      const data = localStorage.getItem(storageKey);
-      return data ? JSON.parse(data) : fallbackValue;
+      const raw = localStorage.getItem(storageKey);
+      if (raw === null || raw === undefined) return null;
+      return this.normalizeRecord(storageKey, JSON.parse(raw));
     } catch {
-      return fallbackValue;
+      return null;
     }
   },
 
-  writeJSON(storageKey, value) {
+  writeLocalRecord(record) {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(value));
+      localStorage.setItem(record.key, JSON.stringify(record));
       return true;
     } catch (error) {
-      console.error(`❌ Error writing ${storageKey}:`, error);
+      console.error(`❌ Error writing ${record.key}:`, error);
+      this.notify("error", `Failed to cache ${record.baseKey}.`, error.message);
       return false;
     }
   },
 
+  rememberRecord(record) {
+    if (!record || !record.key) return;
+    this.memoryCache.set(record.key, record);
+  },
+
+  forgetRecord(storageKey) {
+    this.memoryCache.delete(storageKey);
+  },
+
+  async openDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.IDB_NAME, this.IDB_VERSION);
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains(this.IDB_STORE)) {
+          db.createObjectStore(this.IDB_STORE, { keyPath: "key" });
+        }
+      };
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => {
+        reject(request.error || new Error("Failed to open IndexedDB."));
+      };
+    });
+  },
+
+  async getAllIndexedDbRecords() {
+    if (!this.idb) return [];
+    return new Promise((resolve, reject) => {
+      const transaction = this.idb.transaction(this.IDB_STORE, "readonly");
+      const store = transaction.objectStore(this.IDB_STORE);
+      const request = store.getAll();
+
+      request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+      request.onerror = () => {
+        reject(request.error || new Error("Failed to read IndexedDB cache."));
+      };
+    });
+  },
+
+  async putIndexedDbRecord(record) {
+    if (!this.idb) return false;
+    return new Promise((resolve, reject) => {
+      const transaction = this.idb.transaction(this.IDB_STORE, "readwrite");
+      const store = transaction.objectStore(this.IDB_STORE);
+      store.put(record);
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = () => {
+        reject(transaction.error || new Error("Failed to write IndexedDB cache."));
+      };
+    });
+  },
+
+  async deleteIndexedDbKey(storageKey) {
+    if (!this.idb) return false;
+    return new Promise((resolve, reject) => {
+      const transaction = this.idb.transaction(this.IDB_STORE, "readwrite");
+      const store = transaction.objectStore(this.IDB_STORE);
+      store.delete(storageKey);
+      transaction.oncomplete = () => resolve(true);
+      transaction.onerror = () => {
+        reject(transaction.error || new Error("Failed to delete IndexedDB cache."));
+      };
+    });
+  },
+
+  loadLocalFallbackToMemory() {
+    try {
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key || !key.startsWith("albion_")) continue;
+        if (key === this.KEYS.ACTIVE_SERVER) continue;
+        const record = this.readLocalRecord(key);
+        if (record) this.rememberRecord(record);
+      }
+      return true;
+    } catch (error) {
+      console.error("❌ Error loading local cache fallback:", error);
+      return false;
+    }
+  },
+
+  async loadIndexedDbIntoMemory() {
+    const records = await this.getAllIndexedDbRecords();
+    records.forEach((record) => {
+      const normalized = this.normalizeRecord(record.key, record);
+      if (normalized) this.rememberRecord(normalized);
+    });
+  },
+
+  async migrateLegacyLocalStorage() {
+    if (!this.idb) return false;
+
+    const keysToCheck = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key || !key.startsWith("albion_")) continue;
+      if (key === this.KEYS.ACTIVE_SERVER) continue;
+      keysToCheck.push(key);
+    }
+
+    for (const key of keysToCheck) {
+      if (this.memoryCache.has(key)) continue;
+      const legacyRecord = this.readLocalRecord(key);
+      if (!legacyRecord) continue;
+      this.rememberRecord(legacyRecord);
+      try {
+        await this.putIndexedDbRecord(legacyRecord);
+      } catch (error) {
+        console.warn(`⚠️ Failed migrating ${key} to IndexedDB:`, error);
+      }
+    }
+
+    return true;
+  },
+
+  async initialize() {
+    if (this.initialized) return this.storageEngine === "IndexedDB";
+
+    this.memoryCache = new Map();
+    this.loadLocalFallbackToMemory();
+
+    try {
+      if (typeof indexedDB === "undefined") {
+        throw new Error("IndexedDB is not available in this browser.");
+      }
+
+      this.idb = await this.openDatabase();
+      this.memoryCache = new Map();
+      await this.loadIndexedDbIntoMemory();
+      await this.migrateLegacyLocalStorage();
+      this.storageEngine = "IndexedDB";
+    } catch (error) {
+      console.warn("⚠️ IndexedDB unavailable, using localStorage fallback:", error);
+      this.idb = null;
+      this.storageEngine = "localStorage";
+      this.notify(
+        "warning",
+        "IndexedDB is unavailable. Falling back to localStorage cache.",
+        error.message,
+      );
+    }
+
+    this.initialized = true;
+    return this.storageEngine === "IndexedDB";
+  },
+
+  getRecord(storageKey) {
+    if (this.memoryCache.has(storageKey)) {
+      return this.memoryCache.get(storageKey);
+    }
+    const localRecord = this.readLocalRecord(storageKey);
+    if (localRecord) {
+      this.rememberRecord(localRecord);
+      return localRecord;
+    }
+    return null;
+  },
+
+  readJSON(storageKey, fallbackValue) {
+    const record = this.getRecord(storageKey);
+    return record ? record.value : fallbackValue;
+  },
+
+  writeJSON(storageKey, value) {
+    const baseKey = this.getBaseKeyFromStorageKey(storageKey);
+    const record = this.createRecord(baseKey, storageKey, value, null, null);
+    this.rememberRecord(record);
+
+    if (this.storageEngine === "IndexedDB" && this.idb) {
+      this.putIndexedDbRecord(record).catch((error) => {
+        console.error(`❌ Error writing ${storageKey} to IndexedDB:`, error);
+        this.notify("error", `Failed to cache ${baseKey}.`, error.message);
+      });
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        // Ignore local cleanup issues.
+      }
+      return true;
+    }
+
+    return this.writeLocalRecord(record);
+  },
+
   getScopedOrLegacy(baseKey, fallbackValue) {
-    const scoped = this.readJSON(this.getScopedKey(baseKey), null);
-    if (scoped !== null && scoped !== undefined) return scoped;
-    return this.readJSON(baseKey, fallbackValue);
+    const scopedRecord = this.getRecord(this.getScopedKey(baseKey));
+    if (scopedRecord) return scopedRecord.value;
+
+    const legacyRecord = this.getRecord(baseKey);
+    if (legacyRecord) return legacyRecord.value;
+
+    return fallbackValue;
+  },
+
+  getCacheMetadata(baseKey) {
+    const record =
+      this.getRecord(this.getScopedKey(baseKey)) || this.getRecord(baseKey);
+    if (!record) return null;
+
+    const policy = this.getPolicy(baseKey);
+    return {
+      label: policy.label,
+      updatedAt: record.updatedAt || null,
+      expiresAt: record.expiresAt || null,
+      isStale: this.isRecordStale(record),
+      storageKey: record.key,
+    };
+  },
+
+  isRecordStale(record) {
+    return !!(record && record.expiresAt && Date.now() > record.expiresAt);
+  },
+
+  isStale(baseKey) {
+    const metadata = this.getCacheMetadata(baseKey);
+    return metadata ? metadata.isStale : true;
+  },
+
+  getStaleDatasets() {
+    return Object.keys(this.CACHE_POLICY)
+      .map((baseKey) => ({ baseKey, metadata: this.getCacheMetadata(baseKey) }))
+      .filter((entry) => entry.metadata)
+      .filter((entry) => entry.metadata.isStale)
+      .map((entry) => entry.metadata.label);
   },
 
   saveEquipmentPrices(city, priceData) {
@@ -96,6 +417,7 @@ const DB = {
       return true;
     } catch (error) {
       console.error("❌ Error saving equipment prices:", error);
+      this.notify("error", "Failed to save equipment prices.", error.message);
       return false;
     }
   },
@@ -180,6 +502,7 @@ const DB = {
     const craftingPayload = this.getCraftingProfits();
     const materialTablePayload = this.getMaterialTable();
     const cities = this.getCitiesFetched();
+    const staleDatasets = this.getStaleDatasets();
 
     let totalItems = 0;
     cities.forEach((city) => {
@@ -198,6 +521,9 @@ const DB = {
 
     return {
       activeServer: this.getActiveServer(),
+      storageEngine: this.storageEngine,
+      staleDatasets,
+      staleDatasetCount: staleDatasets.length,
       citiesFetched: cities.length,
       cities,
       totalItemsStored: totalItems,
@@ -230,17 +556,30 @@ const DB = {
       ];
 
       allScopedKeys.forEach((baseKey) => {
-        localStorage.removeItem(this.getScopedKey(baseKey));
+        const scopedKey = this.getScopedKey(baseKey);
+        this.forgetRecord(scopedKey);
+        localStorage.removeItem(scopedKey);
+        if (this.idb) {
+          this.deleteIndexedDbKey(scopedKey).catch((error) => {
+            console.warn(`⚠️ Failed deleting ${scopedKey} from IndexedDB:`, error);
+          });
+        }
       });
 
-      // Remove legacy keys too.
       allScopedKeys.forEach((baseKey) => {
+        this.forgetRecord(baseKey);
         localStorage.removeItem(baseKey);
+        if (this.idb) {
+          this.deleteIndexedDbKey(baseKey).catch((error) => {
+            console.warn(`⚠️ Failed deleting ${baseKey} from IndexedDB:`, error);
+          });
+        }
       });
 
       return true;
     } catch (error) {
       console.error("❌ Error clearing database:", error);
+      this.notify("error", "Failed to clear cached data.", error.message);
       return false;
     }
   },
@@ -261,6 +600,7 @@ const DB = {
       return true;
     } catch (error) {
       console.error("❌ Error loading from database:", error);
+      this.notify("error", "Failed to load cached data.", error.message);
       return false;
     }
   },
